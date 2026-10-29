@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Import models · {{ name }} · Converge{% endblock %}
+{% block nav %}{% include "nav.html" %}{% endblock %}
+{% block content %}
+<h1>Import models from {{ name }}</h1>
+{% if let Some(e) = error %}
+<p class="error">{{ e }}</p>
+<p>Check the base URL and key under <a href="/connections/{{ id }}">Edit</a>, or add models by hand on the <a href="/connections">Connections</a> page.</p>
+{% else %}
+<p class="lead muted">Tick the models to offer. The id on the right is what clients send as <code>model</code>; change it now or later.</p>
+<form method="post" action="/connections/{{ id }}/import" class="card">
+  <table class="list">
+    <thead><tr><th></th><th>Upstream name</th><th>Model id</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr{% if r.added %} class="dim"{% endif %}>
+        <td>{% if r.added %}<span class="badge ok">added</span>{% else %}<input type="checkbox" name="on_{{ loop.index }}" value="on" aria-label="Import {{ r.upstream }}">{% endif %}</td>
+        <td><code>{{ r.upstream }}</code><input type="hidden" name="up_{{ loop.index }}" value="{{ r.upstream }}"></td>
+        <td>{% if !r.added %}<input type="text" name="pub_{{ loop.index }}" value="{{ r.suggested }}" maxlength="100" aria-label="Model id for {{ r.upstream }}">{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if rows.is_empty() %}<p class="muted">The upstream lists no models.</p>{% endif %}
+  <div class="row"><button type="submit" class="primary">Import ticked models</button><a href="/connections">Done</a></div>
+</form>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}{% if id.is_some() %}Edit{% else %}Add{% endif %} connection · Converge{% endblock %}
+{% block nav %}{% include "nav.html" %}{% endblock %}
+{% block main_class %}narrow-wide{% endblock %}
+{% block content %}
+<h1>{% if id.is_some() %}Edit {{ name }}{% else %}Add a connection{% endif %}</h1>
+<section class="card">
+  <form method="post" action="{% if let Some(i) = id %}/connections/{{ i }}{% else %}/connections{% endif %}" class="stack">
+    <label>Kind <span class="hint">What the upstream speaks. Gemini, OpenRouter, OpenAI and llama-swap are all OpenAI compatible.</span>
+      <select name="kind">
+        <option value="openai"{% if !anthropic %} selected{% endif %}>OpenAI compatible</option>
+        <option value="anthropic"{% if anthropic %} selected{% endif %}>Anthropic (base URL https://api.anthropic.com/v1)</option>
+      </select></label>
+    <label>Name <input type="text" name="name" value="{{ name }}" maxlength="60" required placeholder="llama-swap"></label>
+    <label>Slug <span class="hint">Prefix for imported model ids: <code>local</code> gives <code>local/qwen3-30b</code>.</span>
+      <input type="text" name="slug" value="{{ slug }}" maxlength="40" required placeholder="local"></label>
+    <label>Base URL <span class="hint">Up to and including the version, e.g. <code>https://api.openai.com/v1</code>, <code>https://openrouter.ai/api/v1</code>, <code>https://generativelanguage.googleapis.com/v1beta/openai</code>, <code>http://llama-swap:8080/v1</code>.</span>
+      <input type="url" name="base_url" value="{{ base_url }}" required></label>
+    <label>API key at the upstream
+      <span class="hint">{% if has_credential %}A key is stored. Leave empty to keep it.{% else %}Leave empty when the upstream needs none (llama-swap).{% endif %} Encrypted at rest and never shown again.</span>
+      <input type="password" name="credential" autocomplete="off"></label>
+    {% if has_credential %}<label class="check"><input type="checkbox" name="clear_credential" value="on"> Remove the stored key</label>{% endif %}
+    <label>Extra headers <span class="hint">One <code>Name: value</code> per line, e.g. OpenRouter's <code>HTTP-Referer</code> and <code>X-Title</code>.{% if !header_names.is_empty() %} Stored now: {% for h in header_names %}<code>{{ h }}</code> {% endfor %}. Leave empty to keep them; anything entered replaces them all.{% endif %}</span>
+      <textarea name="headers" rows="3" autocomplete="off"></textarea></label>
+    {% if !header_names.is_empty() %}<label class="check"><input type="checkbox" name="clear_headers" value="on"> Remove all extra headers</label>{% endif %}
+    <label>Responses API <span class="hint">How <code>/v1/responses</code> reaches this upstream. Native only if the upstream itself serves it, like OpenAI. Anthropic connections always translate.</span>
+      <select name="responses">
+        <option value="translate"{% if !native_responses %} selected{% endif %}>Translate to chat completions</option>
+        <option value="native"{% if native_responses %} selected{% endif %}>Native: the upstream serves it</option>
+      </select></label>
+    <label>Token limit field <span class="hint">How a persona's or model's <code>max_tokens</code> setting is sent when the client sent no limit itself. Newer OpenAI models only take <code>max_completion_tokens</code>. Not used on Anthropic connections.</span>
+      <select name="token_field">
+        <option value="max_tokens"{% if !completion_tokens %} selected{% endif %}>max_tokens (llama-swap, OpenRouter, Gemini)</option>
+        <option value="max_completion_tokens"{% if completion_tokens %} selected{% endif %}>max_completion_tokens (OpenAI)</option>
+      </select></label>
+    <div class="cols">
+      <label>Seconds to first byte <span class="hint">Includes a model load on llama-swap.</span><input type="number" name="first_byte_secs" value="{{ first_byte_secs }}" min="1" max="3600" required></label>
+      <label>Seconds between chunks <span class="hint">A stream silent this long is cut.</span><input type="number" name="chunk_secs" value="{{ chunk_secs }}" min="1" max="3600" required></label>
+    </div>
+    <label class="check"><input type="checkbox" name="enabled" value="on"{% if enabled %} checked{% endif %}> Enabled</label>
+    <div class="row">
+      <button type="submit" class="primary">{% if id.is_some() %}Save{% else %}Add and import models{% endif %}</button>
+      <a href="/connections">Cancel</a>
+    </div>
+  </form>
+</section>
+{% if let Some(i) = id %}
+<section class="card">
+  <h2>Remove</h2>
+  <p class="muted">Removes the connection, its models and every grant on them. Clients using those models get <code>model_not_found</code>. Refused while a persona runs on one of its models.</p>
+  <form method="post" action="/connections/{{ i }}/delete" data-confirm="Remove {{ name }} and all its models?"><button type="submit" class="danger">Remove connection</button></form>
+</section>
+{% endif %}
+{% endblock %}

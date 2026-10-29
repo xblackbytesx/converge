@@ -1,0 +1,10 @@
+<div class="reveal">
+  <p><strong>{{ name }}</strong>: copy this key now. It is shown only once.</p>
+  <div class="copyline"><code id="new-key">{{ key }}</code><button type="button" class="small" data-copy="#new-key">Copy</button></div>
+  <p>Base URL for clients: <code>{{ base }}</code></p>
+  <details>
+    <summary>Try it</summary>
+    <div class="copyline"><code id="try-key">curl -s {{ base }}/models -H "Authorization: Bearer {{ key }}"</code><button type="button" class="small" data-copy="#try-key">Copy</button></div>
+  </details>
+  <p class="hint"><a href="/keys">Done</a></p>
+</div>

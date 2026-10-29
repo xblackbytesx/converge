@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}API keys · Converge{% endblock %}
+{% block nav %}{% include "nav.html" %}{% endblock %}
+{% block content %}
+<h1>API keys</h1>
+<p class="lead muted">Keys for the OpenAI-compatible endpoint. A key is shown once, when you create it; revoking one stops it at once.</p>
+<section class="card">
+  <h2>New key</h2>
+  <div id="key-box">
+    <form method="post" action="/keys" hx-post="/keys" hx-target="#key-box" class="stack">
+      <div class="inline">
+        <input type="text" name="name" placeholder="What is it for? (Open WebUI, laptop)" maxlength="60" required>
+        <select name="days" aria-label="Expires">
+          {% for d in expiry %}<option value="{{ d }}">{% if *d == 0 %}Never expires{% else %}Expires in {{ d }} days{% endif %}</option>{% endfor %}
+        </select>
+        <button type="submit" class="primary">Create key</button>
+      </div>
+      {% if !models.is_empty() || !personas.is_empty() %}
+      <details>
+        <summary>Only some models and personas</summary>
+        <p class="hint">Tick nothing and the key reaches everything you can use, including what you are given later. Ticked, it reaches only these, and only while you still have them.</p>
+        <div class="picks">
+        {% for p in personas %}<label class="check"><input type="checkbox" name="persona" value="{{ p.id }}"> <code>{{ p.public_id }}</code> <span class="hint">persona</span></label>{% endfor %}
+        {% for m in models %}<label class="check"><input type="checkbox" name="model" value="{{ m.id }}"> <code>{{ m.public_id }}</code></label>{% endfor %}
+        </div>
+      </details>
+      {% endif %}
+    </form>
+  </div>
+</section>
+{% if !mine.is_empty() %}
+<section class="card">
+  <h2>Your keys</h2>
+  {% let rows = mine %}{% let show_owner = false %}{% include "key_rows.html" %}
+</section>
+{% endif %}
+{% if !others.is_empty() %}
+<section class="card">
+  <h2>Everyone else's keys</h2>
+  {% let rows = others %}{% let show_owner = true %}{% include "key_rows.html" %}
+</section>
+{% endif %}
+{% endblock %}

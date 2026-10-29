@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Playground · Converge{% endblock %}
+{% block nav %}{% include "nav.html" %}{% endblock %}
+{% block main_class %}wide{% endblock %}
+{% block content %}
+<div class="row between">
+  <h1>Playground</h1>
+  <div class="row">
+    <button type="button" id="pg-add">Add column</button>
+    <button type="button" id="pg-clear">Clear all</button>
+  </div>
+</div>
+<p class="lead muted">Chat with any model or persona you can use, up to three side by side. Requests run exactly as a client's would and count under Usage; the conversation stays in this tab.</p>
+<noscript><p class="warn-box">The Playground needs JavaScript.</p></noscript>
+<div id="pg" class="pg-columns" data-playground="{{ data }}"></div>
+<form id="pg-compose" class="card pg-compose">
+  <textarea id="pg-input" rows="3" placeholder="Message. Ctrl+Enter sends." aria-label="Message"></textarea>
+  <div class="row">
+    <button type="submit" class="primary" id="pg-send">Send</button>
+    <button type="button" id="pg-stop" class="danger" hidden>Stop</button>
+    <span class="hint">Goes to every column with "send" ticked.</span>
+  </div>
+</form>
+<script src="/static/playground.js" defer></script>
+{% endblock %}

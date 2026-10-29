@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}People · Converge{% endblock %}
+{% block nav %}{% include "nav.html" %}{% endblock %}
+{% block content %}
+<h1>People</h1>
+<section class="card">
+  <h2>Accounts</h2>
+  <table class="list">
+    <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Since</th><th></th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr{% if u.disabled %} class="dim"{% endif %}>
+        <td>{{ u.name }}{% if u.me %} <span class="badge">you</span>{% endif %}</td>
+        <td>{{ u.email }}</td>
+        <td>{% if u.admin %}Admin{% else %}User{% endif %}{% if u.disabled %} <span class="badge warn">disabled</span>{% endif %}</td>
+        <td>{{ u.created }}</td>
+        <td class="actions">
+          <a class="button small" href="/admin/people/{{ u.id }}/access">Access</a>
+          <form method="post" action="/admin/people/{{ u.id }}/role">
+            {% if u.admin %}<input type="hidden" name="role" value="user"><button type="submit" class="small">Make user</button>
+            {% else %}<input type="hidden" name="role" value="admin"><button type="submit" class="small">Make admin</button>{% endif %}
+          </form>
+          {% if !u.me %}
+            {% if u.disabled %}
+            <form method="post" action="/admin/people/{{ u.id }}/enable"><button type="submit" class="small">Enable</button></form>
+            {% else %}
+            <form method="post" action="/admin/people/{{ u.id }}/disable"><button type="submit" class="small danger">Disable</button></form>
+            {% endif %}
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+<section class="card">
+  <h2>Invite someone</h2>
+  <p class="muted">A one-time link, valid for 7 days. Users get their own keys and the models and personas you grant them; admins manage everything.</p>
+  <div id="invite-box">
+    <form method="post" action="/admin/invites" hx-post="/admin/invites" hx-target="#invite-box" class="inline">
+      <input type="text" name="note" placeholder="Who is it for? (optional)" maxlength="80">
+      <select name="role"><option value="user">User</option><option value="admin">Admin</option></select>
+      <button type="submit" class="primary">Create link</button>
+    </form>
+  </div>
+  {% if !invites.is_empty() %}
+  <h3>Open invites</h3>
+  <table class="list">
+    <thead><tr><th>For</th><th>Role</th><th>Expires</th><th></th></tr></thead>
+    <tbody>
+    {% for i in invites %}
+      <tr id="invite-{{ i.id }}"><td>{{ i.note }}</td><td>{{ i.role }}</td><td>{{ i.expires }}</td>
+        <td class="actions"><form method="post" action="/admin/invites/{{ i.id }}/delete" hx-post="/admin/invites/{{ i.id }}/delete" hx-target="#invite-{{ i.id }}" hx-swap="outerHTML"><button type="submit" class="small danger">Withdraw</button></form></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endblock %}

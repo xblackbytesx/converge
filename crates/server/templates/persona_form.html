@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}{% if id.is_some() %}{{ title }}{% else %}New persona{% endif %} · Converge{% endblock %}
+{% block nav %}{% include "nav.html" %}{% endblock %}
+{% block main_class %}narrow-wide{% endblock %}
+{% block content %}
+<h1>{% if id.is_some() %}{{ title }}{% else %}New persona{% endif %}</h1>
+{% if paused %}<p class="warn-box">Paused: its model or that model's connection is off, so clients get <code>model_not_found</code>. Turn it back on under Connections or pick another model.</p>{% endif %}
+{% if groups.is_empty() %}
+<section class="card empty"><p>A persona runs on a model. Add one under <a href="/connections">Connections</a> first.</p></section>
+{% else %}
+<form method="post" action="{% if let Some(i) = id %}/personas/{{ i }}{% else %}/personas{% endif %}" class="card stack">
+  <div class="cols">
+    <label>Title <input type="text" name="title" value="{{ title }}" maxlength="80" required placeholder="AI image prompt helper"></label>
+    <label>Id <span class="hint">What clients send as <code>model</code>.</span>
+      <input type="text" name="public_id" value="{{ public_id }}" maxlength="100" required placeholder="image-prompt-helper"></label>
+  </div>
+  <label>Description <span class="hint">Shown to everyone who can use it, and in <code>/v1/models</code>.</span>
+    <input type="text" name="description" value="{{ description }}" maxlength="500"></label>
+  <label>Model <span class="hint">Swap it any time; the next request uses the new one. On connections with native Responses, conversations continued with <code>previous_response_id</code> do not survive a swap to another connection.</span>
+    <select name="model_id" required>
+      {% if id.is_none() %}<option value="">Pick a model</option>{% endif %}
+      {% for g in groups %}
+      <optgroup label="{{ g.connection }}">
+        {% for m in g.models %}<option value="{{ m.id }}"{% if m.selected %} selected{% endif %}>{{ m.public_id }}{% if m.off %} (off){% endif %}</option>{% endfor %}
+      </optgroup>
+      {% endfor %}
+    </select></label>
+  <label>System prompt
+    <textarea name="system_prompt" rows="12" class="prompt">{{ prompt }}</textarea></label>
+  <fieldset>
+    <legend>When the client sends its own system prompt</legend>
+    <label class="check"><input type="radio" name="prompt_mode" value="prepend"{% if !replace %} checked{% endif %}> Keep it, after this one <span class="hint">merged into one system message</span></label>
+    <label class="check"><input type="radio" name="prompt_mode" value="replace"{% if replace %} checked{% endif %}> Drop it: only this prompt counts</label>
+  </fieldset>
+  <fieldset>
+    <legend>Settings</legend>
+    <p class="hint">Default fills in what the client left out; lock always wins. Model defaults (under Connections) apply where this says off. On native Responses connections only temperature, top_p, max_tokens and reasoning_effort apply: Responses has no field for the others. On Anthropic models only max_tokens, stop and reasoning_effort apply.</p>
+    <table class="list params">
+      <thead><tr><th>Parameter</th><th>Use</th><th>Value</th></tr></thead>
+      <tbody>
+      {% for r in params %}
+        <tr>
+          <td><code>{{ r.key }}</code></td>
+          <td><select name="{{ r.key }}_mode" aria-label="{{ r.key }}">
+            <option value="off"{% if r.mode == "off" %} selected{% endif %}>off</option>
+            <option value="default"{% if r.mode == "default" %} selected{% endif %}>default</option>
+            <option value="lock"{% if r.mode == "lock" %} selected{% endif %}>lock</option>
+          </select></td>
+          <td><input type="text" name="{{ r.key }}_value" value="{{ r.value }}" placeholder="{{ r.hint }}" aria-label="{{ r.key }} value"></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </fieldset>
+  <label class="check"><input type="checkbox" name="prompt_visible" value="on"{% if prompt_visible %} checked{% endif %}> People who can use it can read the prompt</label>
+  <label class="check"><input type="checkbox" name="enabled" value="on"{% if enabled %} checked{% endif %}> Enabled</label>
+  <div class="row">
+    <button type="submit" class="primary">{% if id.is_some() %}Save{% else %}Create persona{% endif %}</button>
+    <a href="/personas">Cancel</a>
+  </div>
+</form>
+{% endif %}
+{% if let Some(i) = id %}
+<section class="card">
+  <h2>Try it</h2>
+  <p class="hint">Chat with it, tune a draft of this prompt and its settings, or compare it on other models. Saving a draft there lands in the history below.</p>
+  <p><a class="button" href="/playground?pick={{ public_id }}">Open in Playground</a></p>
+</section>
+<section class="card">
+  <h2>History</h2>
+  {% if history.is_empty() %}<p class="muted">No changes yet.</p>{% endif %}
+  <table class="list">
+    <tbody>
+    {% for h in history %}
+      <tr>
+        <td class="nowrap">{{ h.at }}</td>
+        <td>{{ h.text }}{% if let Some(b) = h.before %}<details><summary>Earlier prompt</summary><pre class="prompt-view">{{ b }}</pre></details>{% endif %}</td>
+        <td class="hint">{{ h.by }}</td>
+        <td class="actions">{% if let Some(label) = h.undo %}<form method="post" action="/personas/{{ i }}/history/{{ h.id }}/restore"><button type="submit" class="small">{{ label }}</button></form>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+<section class="card">
+  <h2>Remove</h2>
+  <p class="muted">Clients using <code>{{ public_id }}</code> get <code>model_not_found</code>. Its model stays.</p>
+  <form method="post" action="/personas/{{ i }}/delete" data-confirm="Remove the persona {{ public_id }}?"><button type="submit" class="danger">Remove persona</button></form>
+</section>
+{% endif %}
+{% endblock %}

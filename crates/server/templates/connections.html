@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Connections · Converge{% endblock %}
+{% block nav %}{% include "nav.html" %}{% endblock %}
+{% block content %}
+<div class="row between">
+  <h1>Connections</h1>
+  <a class="button primary" href="/connections/new">Add connection</a>
+</div>
+<p class="lead muted">The upstreams Converge proxies to, each with the models it serves. Pure plumbing: personas are built on these models on <a href="/personas">their own page</a>.</p>
+{% if conns.is_empty() %}
+<section class="card empty"><p>No connections yet. Add llama-swap, OpenAI, Gemini or OpenRouter to start.</p></section>
+{% endif %}
+{% for v in conns %}
+<section class="card{% if !v.c.enabled %} dim{% endif %}">
+  <div class="row between">
+    <div>
+      <h2>{{ v.c.name }} {% if v.anthropic() %}<span class="badge">Anthropic</span>{% endif %} {% if !v.c.enabled %}<span class="badge warn">disabled</span>{% endif %}</h2>
+      <p class="hint"><code>{{ v.c.base_url }}</code> · {% if v.c.has_credential %}credential set{% else %}no credential{% endif %} · Responses API: {% if v.anthropic() %}translated{% else %}{{ v.c.responses }}{% endif %}</p>
+    </div>
+    <div class="actions">
+      <form method="post" action="/connections/{{ v.c.id }}/test" hx-post="/connections/{{ v.c.id }}/test" hx-target="#test-{{ v.c.id }}"><button type="submit" class="small">Test</button></form>
+      <a class="button small" href="/connections/{{ v.c.id }}/import">Import models</a>
+      <a class="button small" href="/connections/{{ v.c.id }}">Edit</a>
+    </div>
+  </div>
+  <div id="test-{{ v.c.id }}"></div>
+  {% if v.models.is_empty() %}
+  <p class="muted">No models yet.</p>
+  {% else %}
+  <table class="list">
+    <thead><tr><th>Model id (what clients send)</th><th>Upstream name</th><th>On</th><th></th></tr></thead>
+    <tbody>
+    {% for m in v.models %}
+      <tr{% if !m.enabled %} class="dim"{% endif %}>
+        <td colspan="3">
+          <form method="post" action="/models/{{ m.id }}" class="inline">
+            <input type="text" name="public_id" value="{{ m.public_id }}" maxlength="100" aria-label="Model id">
+            <code>{{ m.upstream_name }}</code>
+            <label class="check"><input type="checkbox" name="enabled" value="on"{% if m.enabled %} checked{% endif %}> enabled</label>
+            <label class="check" title="{% if v.anthropic() %}Ask Claude for summarized thinking, shown as reasoning{% else %}Reasoning items in translated /v1/responses answers{% endif %}"><input type="checkbox" name="reasoning" value="on"{% if m.reasoning_items %} checked{% endif %}> reasoning</label>
+            {% if v.anthropic() %}<label class="check" title="Anthropic prompt caching: follow-up requests read the repeated start of the conversation at a fraction of the price"><input type="checkbox" name="cache" value="on"{% if m.prompt_cache %} checked{% endif %}> cache</label>{% else %}{% if m.prompt_cache %}<input type="hidden" name="cache" value="on">{% endif %}{% endif %}
+            <button type="submit" class="small">Save</button>
+          </form>
+        </td>
+        <td class="actions"><a class="button small" href="/playground?pick={{ m.public_id }}">Playground</a> <form method="post" action="/models/{{ m.id }}/delete" data-confirm="Remove {{ m.public_id }}? Clients using it get model_not_found."><button type="submit" class="small danger">Remove</button></form></td>
+      </tr>
+      <tr class="sub{% if !m.enabled %} dim{% endif %}">
+        <td colspan="4">
+          {% if !m.personas.is_empty() %}<p class="hint">Personas on it: {% for (pid, pname) in m.personas %}<a href="/personas/{{ pid }}"><code>{{ pname }}</code></a> {% endfor %}</p>{% endif %}
+          <details>
+            <summary class="hint">Defaults: {{ m.defaults }}</summary>
+            <form method="post" action="/models/{{ m.id }}/params" class="stack">
+              <p class="hint">Filled in when a client (or persona) leaves them out. Blank is off.</p>
+              <div class="param-grid">
+              {% for r in m.params %}
+                <label>{{ r.key }} <input type="text" name="{{ r.key }}_value" value="{{ r.value }}" placeholder="{{ r.hint }}"></label>
+              {% endfor %}
+              </div>
+              <div class="row"><button type="submit" class="small">Save defaults</button></div>
+            </form>
+          </details>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  <details>
+    <summary>Add a model by hand</summary>
+    <form method="post" action="/connections/{{ v.c.id }}/models" class="inline">
+      <input type="text" name="public_id" placeholder="{{ v.c.slug }}/model-name" maxlength="100" required>
+      <input type="text" name="upstream_name" placeholder="name at the upstream" maxlength="200" required>
+      <button type="submit" class="small">Add</button>
+    </form>
+  </details>
+</section>
+{% endfor %}
+{% endblock %}

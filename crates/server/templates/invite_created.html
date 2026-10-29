@@ -1,0 +1,5 @@
+<div class="reveal">
+  <p>Send this link{% if admin %} (admin invite){% endif %}. It works once and expires {{ expires }}.</p>
+  <div class="copyline"><code id="invite-link">{{ link }}</code><button type="button" class="small" data-copy="#invite-link">Copy</button></div>
+  <p class="hint"><a href="/admin/people">Done</a></p>
+</div>

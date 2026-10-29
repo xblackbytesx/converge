@@ -1,0 +1,44 @@
+# cargo-deny: part of the lint gate (make lint, CI). Supply chain is why
+# Converge exists (AGENTS.md, Why it exists), so this is not optional.
+
+[graph]
+all-features = true
+
+[advisories]
+# Every RustSec advisory fails the gate, including unmaintained and yanked.
+# An exception needs an `ignore` entry with the advisory id and a reason.
+yanked = "deny"
+ignore = [
+  # basic-toml, unmaintained (no vulnerability). Pulled in only by
+  # askama_derive at compile time, to read an askama.toml this repo does not
+  # have; it never runs in the server. No askama release replaces it yet
+  # (0.16.1, 2026-10-29). Drop this entry when askama moves to `toml`.
+  { id = "RUSTSEC-2026-0374", reason = "compile-time only, via askama_derive; no fixed askama yet" },
+]
+
+[licenses]
+# Permissive licenses compatible with shipping under GPL-3.0-or-later.
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "CDLA-Permissive-2.0",
+  "GPL-3.0-or-later",
+  "ISC",
+  "MIT",
+  "MPL-2.0",
+  "Unicode-3.0",
+  "Zlib",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+# crates.io only: no git dependencies, no other registries.
+unknown-registry = "deny"
+unknown-git = "deny"

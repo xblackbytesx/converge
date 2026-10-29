@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Settings · Converge{% endblock %}
+{% block nav %}{% include "nav.html" %}{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+{% if let Some(n) = notice %}<p class="ok">{{ n }}</p>{% endif %}
+<div class="cols">
+<section class="card">
+  <h2>Profile</h2>
+  <form method="post" action="/settings/profile" class="stack">
+    <label>Email <input type="email" value="{{ email }}" disabled></label>
+    <label>Name <input type="text" name="name" value="{{ name }}" maxlength="60"></label>
+    <label>Time zone <span class="hint">Dates on these pages use it.</span>
+      <select name="tz">
+        {% for z in zones %}<option value="{{ z }}"{% if *z == tz %} selected{% endif %}>{{ z }}</option>{% endfor %}
+      </select>
+    </label>
+    <button type="submit">Save</button>
+  </form>
+</section>
+<section class="card">
+  <h2>Password</h2>
+  <form method="post" action="/settings/password" class="stack">
+    <label>Current password <input type="password" name="current" autocomplete="current-password" required></label>
+    <label>New password <input type="password" name="password" minlength="10" autocomplete="new-password" required></label>
+    <label>New password again <input type="password" name="password2" minlength="10" autocomplete="new-password" required></label>
+    <button type="submit">Change password</button>
+  </form>
+</section>
+</div>
+{% endblock %}

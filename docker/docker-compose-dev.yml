@@ -1,0 +1,46 @@
+# DEVELOPMENT + TESTS: source bind-mounted, bacon rebuilds on change.
+#   make dev | make test | make lint
+# Not for deployment; see deploy/docker-compose.yml for that.
+services:
+  converge-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    container_name: converge-server-dev
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      DATABASE_URL: postgres://converge:converge@db:5432/converge
+      CONVERGE_TEST_DATABASE_URL: postgres://converge:converge@db:5432/postgres
+      CONVERGE_BIND: 0.0.0.0:8080
+      # Dev only. Never reuse this key anywhere real.
+      CONVERGE_SECRET_KEY: ZGV2LW9ubHktZGV2LW9ubHktZGV2LW9ubHktZGV2LW8=
+      CONVERGE_COOKIE_SECURE: "false"
+      RUST_LOG: ${RUST_LOG:-debug}
+    volumes:
+      - ..:/app
+      - cargo-registry:/usr/local/cargo/registry
+      - target:/app/target
+
+  db:
+    image: postgres:17
+    container_name: converge-server-dev-db
+    environment:
+      POSTGRES_USER: converge
+      POSTGRES_PASSWORD: converge
+      POSTGRES_DB: converge
+    volumes:
+      - db-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U converge"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  cargo-registry:
+  target:
+  db-dev:

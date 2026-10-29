@@ -1,0 +1,167 @@
+name: Build and publish release image
+
+on:
+  push:
+    tags:
+      # Release tags only (v1.2.3); other v-tags never publish.
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  # Exercise the pipeline without minting a release: tests run and the image
+  # builds (warming the cache), but nothing is pushed.
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/xblackbytesx/converge-server
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: converge
+          POSTGRES_PASSWORD: converge
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U converge"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Each integration test creates and drops its own database here.
+      CONVERGE_TEST_DATABASE_URL: postgres://converge:converge@localhost:5432/postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Tag must match the workspace version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          # Every crate inherits [workspace.package] version, so one check covers all.
+          crate=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version *= *"\(.*\)"/\1/p' Cargo.toml | head -1)
+          if [ "$tag" != "$crate" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match Cargo.toml workspace version $crate"
+            echo "Bump [workspace.package] version to $tag (or retag) and push again."
+            exit 1
+          fi
+          echo "workspace version $crate matches tag $GITHUB_REF_NAME"
+
+      # The image's dependency-cache stage copies member manifests one by one;
+      # a crate missing there fails the image build (cargo loads the whole
+      # workspace), so catch it here in seconds instead.
+      - name: Dockerfile copies every workspace member
+        run: |
+          for d in crates/*/; do
+            grep -q "^COPY ${d}Cargo.toml " docker/Dockerfile \
+              || { echo "::error::docker/Dockerfile does not COPY ${d}Cargo.toml"; exit 1; }
+          done
+
+      # The version comes from rust-toolchain.toml (one source of truth),
+      # installed explicitly: newer rustup no longer auto-installs it.
+      - name: Install Rust
+        run: |
+          if ! command -v rustup >/dev/null; then
+            curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          fi
+          export PATH="$HOME/.cargo/bin:$PATH"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          channel=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)
+          rustup toolchain install "$channel" --profile minimal --component clippy,rustfmt
+          rustc --version
+
+      - name: Lint
+        run: |
+          cargo fmt --all --check
+          cargo clippy --workspace --all-targets -- -D warnings
+
+      # Advisories, licenses and sources (deny.toml). Pinned release binary,
+      # checked against its published sha256 before it runs.
+      - name: cargo deny
+        run: |
+          v=0.20.2
+          f=cargo-deny-$v-x86_64-unknown-linux-musl.tar.gz
+          curl -fsSLO "https://github.com/EmbarkStudios/cargo-deny/releases/download/$v/$f"
+          curl -fsSLO "https://github.com/EmbarkStudios/cargo-deny/releases/download/$v/$f.sha256"
+          echo "$(cat "$f.sha256" | cut -d' ' -f1)  $f" | sha256sum -c -
+          tar -xzf "$f" --strip-components=1 -C "$HOME/.cargo/bin" "cargo-deny-$v-x86_64-unknown-linux-musl/cargo-deny"
+          cargo deny check
+
+      - name: Test
+        run: cargo test --workspace --release
+
+      # Added time to first byte through the proxy; fails above 5 ms at p50.
+      - name: Bench
+        run: cargo test -p converge-server --release --test bench -- --ignored --nocapture
+
+  build-and-publish:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Only for the runtime stage's one `apt-get`; the Rust build itself
+      # cross-compiles natively (see docker/Dockerfile).
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=raw,value=ci-test,enable=${{ github.event_name == 'workflow_dispatch' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          # A dispatch run builds and caches but never publishes, so a test
+          # can't overwrite `latest`.
+          push: ${{ startsWith(github.ref, 'refs/tags/') }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # The GitHub release the "Latest release" badge and the app's README point at; the image
+  # itself is on ghcr.io.
+  release:
+    needs: build-and-publish
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="${{ github.ref_name }}"
+          gh release view "$tag" > /dev/null 2>&1 \
+            || gh release create "$tag" --verify-tag --title "$tag" --generate-notes \
+              --notes "Image: \`ghcr.io/xblackbytesx/converge-server:${tag#v}\`"

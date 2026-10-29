@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Access · {{ who }} · Converge{% endblock %}
+{% block nav %}{% include "nav.html" %}{% endblock %}
+{% block main_class %}narrow-wide{% endblock %}
+{% block content %}
+<h1>Access for {{ who }}</h1>
+{% if admin %}<p class="warn-box">Admins can use every model and persona without grants, so these grants only matter if they become a user. Limits apply to admins too.</p>{% endif %}
+<form method="post" action="/admin/people/{{ id }}/access" class="card stack">
+  <label class="check"><input type="checkbox" name="all" value="on"{% if all %} checked{% endif %}> Everything, including models and personas added later</label>
+  {% if !personas.is_empty() %}
+  <fieldset>
+    <legend>Or these personas</legend>
+    <p class="hint">A persona works without access to its model.</p>
+    {% for p in personas %}
+    <label class="check"><input type="checkbox" name="persona" value="{{ p.id }}"{% if p.granted %} checked{% endif %}> {{ p.title }} <code>{{ p.public_id }}</code></label>
+    {% endfor %}
+  </fieldset>
+  {% endif %}
+  {% if models.is_empty() %}
+  <p class="muted">No models yet. Add them under <a href="/connections">Connections</a>.</p>
+  {% else %}
+  <fieldset>
+    <legend>Or these models</legend>
+    {% for m in models %}
+    <label class="check"><input type="checkbox" name="model" value="{{ m.id }}"{% if m.granted %} checked{% endif %}> <code>{{ m.public_id }}</code> <span class="hint">{{ m.connection }}</span></label>
+    {% endfor %}
+  </fieldset>
+  {% endif %}
+  <fieldset>
+    <legend>Limits</legend>
+    <p class="hint">Empty means no limit. Clients that go over get <code>429</code> with <code>Retry-After</code>. Tokens per day count prompt and reply tokens and reset at midnight in this person's time zone.</p>
+    <div class="cols three">
+      <label>Requests per minute <input type="text" inputmode="numeric" name="rpm" value="{{ rpm }}" placeholder="no limit"></label>
+      <label>Tokens per day <input type="text" inputmode="numeric" name="tokens_per_day" value="{{ tokens_per_day }}" placeholder="no limit"></label>
+      <label>Parallel requests per key <input type="text" inputmode="numeric" name="parallel_per_key" value="{{ parallel_per_key }}" placeholder="no limit"></label>
+    </div>
+  </fieldset>
+  <div class="row"><button type="submit" class="primary">Save</button><a href="/admin/people">Back to People</a></div>
+</form>
+{% endblock %}

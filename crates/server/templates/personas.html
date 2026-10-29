@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Personas · Converge{% endblock %}
+{% block nav %}{% include "nav.html" %}{% endblock %}
+{% block content %}
+<div class="row between">
+  <h1>Personas</h1>
+  {% if admin %}<a class="button primary" href="/personas/new">New persona</a>{% endif %}
+</div>
+<p class="lead muted">Named system prompts built on a model, picked in any client like a model. {% if admin %}The model behind a persona can be swapped at any time without clients noticing.{% else %}Send the id as <code>model</code>.{% endif %}</p>
+{% if cards.is_empty() %}
+<section class="card empty"><p>{% if admin %}No personas yet. Create one on any model under <a href="/connections">Connections</a>.{% else %}No personas have been shared with you yet.{% endif %}</p></section>
+{% else %}
+<div class="persona-grid">
+  {% for c in cards %}
+  <a class="card persona{% if c.paused || !c.enabled %} dim{% endif %}" href="/personas/{{ c.id }}">
+    <h2>{{ c.title }}</h2>
+    <p><code>{{ c.public_id }}</code>
+      {% if !c.enabled %}<span class="badge warn">disabled</span>{% else if c.paused %}<span class="badge warn">paused</span>{% endif %}</p>
+    {% if !c.description.is_empty() %}<p class="muted">{{ c.description }}</p>{% endif %}
+    {% if admin %}<p class="hint">on <code>{{ c.model }}</code></p>{% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

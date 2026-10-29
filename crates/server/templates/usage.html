@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Usage · Converge{% endblock %}
+{% block nav %}{% include "nav.html" %}{% endblock %}
+{% block content %}
+<h1>Usage</h1>
+<p class="lead muted">{{ period }}{% if !whose.is_empty() %}, {{ whose }}{% endif %}. Days in your time zone. Counts only: prompts and replies are never stored.</p>
+<form method="get" action="/usage" class="card inline filters">
+  <select name="range" aria-label="Period">
+    {% for r in ranges %}<option value="{{ r.value }}"{% if r.selected %} selected{% endif %}>{{ r.label }}</option>{% endfor %}
+  </select>
+  {% if admin %}
+  <select name="who" aria-label="Person">
+    <option value="">Everyone</option>
+    {% for p in people %}<option value="{{ p.value }}"{% if p.selected %} selected{% endif %}>{{ p.label }}</option>{% endfor %}
+  </select>
+  {% endif %}
+  <button type="submit">Show</button>
+  <span class="spacer"></span>
+  <a href="/usage.csv?{{ query }}" download>Download CSV</a>
+</form>
+<div class="tiles">
+  {% for t in tiles %}<div class="card tile"><span class="hint">{{ t.label }}</span><strong>{{ t.value }}</strong><span class="hint">{{ t.sub }}</span></div>{% endfor %}
+</div>
+{% if !limits.is_empty() %}
+<section class="card">
+  <h2>Limits</h2>
+  <ul class="plain">{% for l in limits %}<li>{{ l }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+<section class="card">
+  <h2>Per day</h2>
+  <table class="list days">
+    <thead><tr><th>Day</th><th class="num">Requests</th><th class="num">Tokens</th><th class="bar-col"><span class="sr-only">Tokens, compared</span></th></tr></thead>
+    <tbody>
+    {% for d in days %}
+      <tr><td class="nowrap">{{ d.day }}</td><td class="num">{{ d.requests }}</td><td class="num">{{ d.tokens }}</td><td class="bar-col"><progress max="{{ max_day }}" value="{{ d.value }}" aria-label="{{ d.tokens }} tokens"></progress></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% for b in breakdowns %}
+<section class="card">
+  <h2>{{ b.title }}</h2>
+  {% if b.rows.is_empty() %}<p class="muted">Nothing in this period.</p>{% else %}
+  <table class="list">
+    <thead><tr><th>{{ b.head }}</th><th class="num">Requests</th><th class="num">Tokens in</th><th class="num">Cached</th><th class="num">Tokens out</th></tr></thead>
+    <tbody>
+    {% for r in b.rows %}
+      <tr><td>{{ r.label }}{% if !r.sub.is_empty() %} <span class="hint">{{ r.sub }}</span>{% endif %}</td><td class="num">{{ r.requests }}</td><td class="num">{{ r.tokens_in }}</td><td class="num">{{ r.cached }}</td><td class="num">{{ r.tokens_out }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endfor %}
+<section class="card">
+  <h2>Requests</h2>
+  {% if rows.is_empty() %}<p class="muted">Nothing in this period.</p>{% else %}
+  <table class="list">
+    <thead><tr><th>When</th>{% if admin %}<th>Who</th>{% endif %}<th>Model or persona</th><th>Endpoint</th><th class="num">Status</th><th>Tokens</th><th class="num">First byte</th><th class="num">Total</th><th></th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td class="nowrap">{{ r.at }}</td>{% if admin %}<td>{{ r.who }}</td>{% endif %}
+        <td>{% if let Some(p) = r.persona %}<code>{{ p }}</code> <span class="hint">on {{ r.model }}</span>{% else %}<code>{{ r.model }}</code>{% endif %}</td><td>{{ r.endpoint }}</td>
+        <td class="num">{% if r.status >= 400 %}<span class="badge err">{{ r.status }}</span>{% else %}{{ r.status }}{% endif %}</td>
+        <td>{{ r.tokens }}</td><td class="num">{{ r.ttfb }}</td><td class="num">{{ r.total }}</td>
+        <td>{% if !r.note.is_empty() %}<span class="badge warn">{{ r.note }}</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if let Some(b) = older %}<p><a href="/usage?{{ query }}&amp;before={{ b }}">Older</a></p>{% endif %}
+  {% endif %}
+</section>
+{% endblock %}

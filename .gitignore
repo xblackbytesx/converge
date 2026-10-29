@@ -1,0 +1,43 @@
+# --- Rust build output ---
+/target
+
+# --- Local data (make up) ---
+/data
+
+# --- IDE / assistant tooling ---
+# Local scratch directories various editors and coding assistants create in the
+# repo root. None of them belong in the history.
+.idea/
+.vscode/
+.fleet/
+.claude/
+.cursor/
+.aider*
+.continue/
+.windsurf/
+*.iml
+*.swp
+*~
+
+# --- Secrets / local config ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+# --- Database dumps ---
+*.dump
+*.sql.gz
+backups/
+
+# --- Your own data ---
+# Usage CSVs from the Usage page name every person, key and model used, so
+# keep them out of the history even when one lands in the working tree.
+converge-usage-*.csv
+
+# --- OS noise / logs ---
+.DS_Store
+Thumbs.db
+*.log

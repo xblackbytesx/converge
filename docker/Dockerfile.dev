@@ -1,0 +1,7 @@
+# Dev image: bacon rebuild-and-restart. The repo is bind-mounted at /app;
+# registry and target live in named volumes so rebuilds stay warm.
+FROM rust:1.92-bookworm
+RUN cargo install bacon --locked && cargo install cargo-deny --locked
+RUN rustup component add clippy rustfmt
+WORKDIR /app
+CMD ["bacon", "--headless", "serve"]

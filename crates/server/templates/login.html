@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Log in · Converge{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<section class="card login">
+  <h1 class="brand-title">Converge</h1>
+  <p class="muted">One endpoint for every model and persona.</p>
+  {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+  <form method="post" action="/login" class="stack">
+    <label>Email <input type="email" name="email" value="{{ email }}" autocomplete="username" required autofocus></label>
+    <label>Password <input type="password" name="password" autocomplete="current-password" required></label>
+    <button type="submit" class="primary">Log in</button>
+  </form>
+  <p class="hint">First time? On the server: <code>converge-server create-admin you@example.com</code>, then <code>converge-server set-password you@example.com</code>.</p>
+</section>
+{% endblock %}

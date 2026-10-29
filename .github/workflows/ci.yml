@@ -1,0 +1,79 @@
+name: CI
+
+# Every push and pull request: the same gate as `make lint` and `make test`.
+# Releases (images) are release.yml, on a version tag.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: converge
+          POSTGRES_PASSWORD: converge
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U converge"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Each integration test creates and drops its own database here.
+      CONVERGE_TEST_DATABASE_URL: postgres://converge:converge@localhost:5432/postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The image's dependency-cache stage copies member manifests one by one;
+      # a crate missing there fails the image build (cargo loads the whole
+      # workspace), so catch it here in seconds instead.
+      - name: Dockerfile copies every workspace member
+        run: |
+          for d in crates/*/; do
+            grep -q "^COPY ${d}Cargo.toml " docker/Dockerfile \
+              || { echo "::error::docker/Dockerfile does not COPY ${d}Cargo.toml"; exit 1; }
+          done
+
+      # The version comes from rust-toolchain.toml (one source of truth),
+      # installed explicitly: newer rustup no longer auto-installs it.
+      - name: Install Rust
+        run: |
+          if ! command -v rustup >/dev/null; then
+            curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          fi
+          export PATH="$HOME/.cargo/bin:$PATH"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          channel=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)
+          rustup toolchain install "$channel" --profile minimal --component clippy,rustfmt
+          rustc --version
+
+      - name: Lint
+        run: |
+          cargo fmt --all --check
+          cargo clippy --workspace --all-targets -- -D warnings
+
+      # Advisories, licenses and sources (deny.toml). Pinned release binary,
+      # checked against its published sha256 before it runs.
+      - name: cargo deny
+        run: |
+          v=0.20.2
+          f=cargo-deny-$v-x86_64-unknown-linux-musl.tar.gz
+          curl -fsSLO "https://github.com/EmbarkStudios/cargo-deny/releases/download/$v/$f"
+          curl -fsSLO "https://github.com/EmbarkStudios/cargo-deny/releases/download/$v/$f.sha256"
+          echo "$(cat "$f.sha256" | cut -d' ' -f1)  $f" | sha256sum -c -
+          tar -xzf "$f" --strip-components=1 -C "$HOME/.cargo/bin" "cargo-deny-$v-x86_64-unknown-linux-musl/cargo-deny"
+          cargo deny check
+
+      - name: Test
+        run: cargo test --workspace --release
+
+      # Added time to first byte through the proxy; fails above 5 ms at p50.
+      - name: Bench
+        run: cargo test -p converge-server --release --test bench -- --ignored --nocapture

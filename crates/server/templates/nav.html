@@ -1,0 +1,16 @@
+<header class="nav">
+  <a class="brand" href="/">Converge</a>
+  <nav>
+    <a href="/connections" class="{{ nav.on("connections") }}">{% if nav.admin %}Connections{% else %}Models{% endif %}</a>
+    <a href="/personas" class="{{ nav.on("personas") }}">Personas</a>
+    <a href="/playground" class="{{ nav.on("playground") }}">Playground</a>
+    <span class="sep" aria-hidden="true"></span>
+    <a href="/keys" class="{{ nav.on("keys") }}">Keys</a>
+    <a href="/usage" class="{{ nav.on("usage") }}">Usage</a>
+    {% if nav.admin %}<a href="/admin/people" class="{{ nav.on("admin") }}">People</a>{% endif %}
+  </nav>
+  <div class="who">
+    <a href="/settings" class="{{ nav.on("settings") }}">{{ nav.label }}</a>
+    <form method="post" action="/logout"><button type="submit" class="link">Log out</button></form>
+  </div>
+</header>

@@ -1,0 +1,17 @@
+<table class="list">
+  <thead><tr><th>Name</th><th>Key</th><th>Reaches</th>{% if show_owner %}<th>Owner</th>{% endif %}<th>Created</th><th>Expires</th><th>Last used</th><th></th></tr></thead>
+  <tbody>
+  {% for k in rows %}
+    <tr{% if k.revoked || k.expired %} class="dim"{% endif %}>
+      <td>{{ k.name }}</td>
+      <td><code>{{ k.prefix }}…</code></td>
+      <td>{% if let Some(s) = k.scope %}<span class="hint">only</span> {{ s }}{% else %}<span class="hint">everything</span>{% endif %}</td>
+      {% if show_owner %}<td>{{ k.owner }}</td>{% endif %}
+      <td>{{ k.created }}</td>
+      <td>{{ k.expires }}{% if k.expired %} <span class="badge warn">expired</span>{% endif %}</td>
+      <td>{{ k.last_used }}</td>
+      <td class="actions">{% if k.revoked %}<span class="badge">revoked</span>{% else %}<form method="post" action="/keys/{{ k.id }}/revoke" data-confirm="Revoke {{ k.name }}? Clients using it stop working at once."><button type="submit" class="small danger">Revoke</button></form>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>

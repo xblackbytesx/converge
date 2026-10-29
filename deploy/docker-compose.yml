@@ -1,0 +1,81 @@
+# PRODUCTION EXAMPLE: the released image from the registry, behind Traefik.
+# Copy this file and .env.example into your stack; see deploy/README.md.
+name: converge-server
+
+networks:
+  proxy:
+    name: proxy
+    external: true
+  internal:
+    internal: true
+
+volumes:
+  converge-server-database:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DOCKER_ROOT}/converge-server/database/
+
+services:
+  converge-server-app:
+    container_name: converge-server-app
+    image: ghcr.io/xblackbytesx/converge-server:${CONVERGE_VERSION:-latest}
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    env_file:
+      - ./.env
+    cap_drop:
+      - ALL
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - internal
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.converge-server-app-secure.entrypoints=websecure
+      - traefik.http.routers.converge-server-app-secure.rule=Host(`${SUBDOMAIN:+${SUBDOMAIN}.}${DOMAIN}`)
+      - traefik.http.routers.converge-server-app-secure.tls=true
+      - traefik.http.routers.converge-server-app-secure.tls.certresolver=${CERT_RESOLVER}
+      - traefik.http.routers.converge-server-app-secure.service=converge-server-app
+      - traefik.http.routers.converge-server-app-secure.middlewares=https-redirect@file,non-www@file,secure-headers@file,gzip-compress@file
+      - traefik.http.services.converge-server-app.loadbalancer.server.port=8080
+    depends_on:
+      converge-server-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  converge-server-db:
+    container_name: converge-server-db
+    image: docker.io/library/postgres:17-alpine
+    security_opt:
+      - no-new-privileges:true
+    env_file:
+      - ./.env
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_READ_SEARCH
+      - FOWNER
+      - SETGID
+      - SETUID
+    volumes:
+      - converge-server-database:/var/lib/postgresql/data
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -d "$${POSTGRES_DB}" -U "$${POSTGRES_USER}"']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped

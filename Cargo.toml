@@ -1,0 +1,27 @@
+[workspace]
+resolver = "3"
+# core: wire types and every translation (personas, Responses, Anthropic). Pure, no IO.
+# server: the website, the /v1 proxy, the usage writer and the CLI.
+members = ["crates/core", "crates/server"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+license = "GPL-3.0-or-later"
+# Never on crates.io: shipped only as our own image.
+publish = false
+
+[workspace.dependencies]
+converge-core = { path = "crates/core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+hex = "0.4"
+base64 = "0.22"
+thiserror = "2"
+anyhow = "1"
+
+[profile.release]
+lto = "thin"
+strip = true
