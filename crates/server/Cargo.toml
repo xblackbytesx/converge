@@ -7,6 +7,12 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+# The crate is converge-server (next to converge-core); the program people
+# run is just `converge`.
+[[bin]]
+name = "converge"
+path = "src/main.rs"
+
 [dependencies]
 converge-core.workspace = true
 serde.workspace = true

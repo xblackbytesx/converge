@@ -2,15 +2,15 @@
 # release. Not a deployment: no reverse proxy, port published on the host.
 # Run from the repo root (reads ./.env):  make image / make up / make down
 # The deployable example (registry image, Traefik) is deploy/docker-compose.yml.
-name: converge-server-local
+name: converge-local
 
 services:
-  converge-server:
-    container_name: converge-server-local
+  converge:
+    container_name: converge-local
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    image: converge-server:local
+    image: converge:local
     security_opt:
       - no-new-privileges:true
     read_only: true
@@ -19,7 +19,7 @@ services:
     ports:
       - "${PORT:-8080}:8080"
     environment:
-      DATABASE_URL: postgres://converge:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@converge-server-local-db:5432/converge
+      DATABASE_URL: postgres://converge:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@converge-local-db:5432/converge
       CONVERGE_BIND: 0.0.0.0:8080
       CONVERGE_SECRET_KEY: ${CONVERGE_SECRET_KEY:?set CONVERGE_SECRET_KEY in .env (make secret)}
       CONVERGE_PUBLIC_URL: ${CONVERGE_PUBLIC_URL:-}
@@ -29,7 +29,7 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
     depends_on:
-      converge-server-local-db:
+      converge-local-db:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
@@ -39,8 +39,8 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  converge-server-local-db:
-    container_name: converge-server-local-db
+  converge-local-db:
+    container_name: converge-local-db
     image: docker.io/library/postgres:17-alpine
     security_opt:
       - no-new-privileges:true

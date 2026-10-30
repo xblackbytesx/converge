@@ -45,7 +45,7 @@ through `make` (docker compose), no host toolchain.
 CI: GitHub Actions. `ci.yml` runs the gate on every push; `release.yml` on a
 `vX.Y.Z` tag runs the same gate, checks the tag equals
 `[workspace.package] version`, pushes the amd64 + arm64 image
-`ghcr.io/xblackbytesx/converge-server` and creates the GitHub release. The
+`ghcr.io/xblackbytesx/converge` and creates the GitHub release. The
 GHCR package must be public (package settings, once). CI fetches cargo-deny
 as a pinned release binary and checks its published sha256 before running
 it; bump `v=` in both workflows together. The dev image builds it from
@@ -1136,8 +1136,9 @@ As planned, with these specifics:
 The privacybox app, next to LiteLLM. Small enough that it was built
 straight from the milestone row, on the owner's go-ahead.
 
-- **`apps/converge-server`** in privacybox (named after the image and
-  `deploy/`, like `apps/slopstream-server`): `docker-compose.yml` on the
+- **`apps/converge`** in privacybox: containers `converge-app` and
+  `converge-db`, data under `$DOCKER_ROOT/converge`:
+  `docker-compose.yml` on the
   stack's conventions (proxy + internal networks, bind volume under
   `DOCKER_ROOT`, the four file middlewares, `cap_drop: ALL`, read-only
   root) and `.env.example`. `CONVERGE_BEHIND_PROXY` is fixed to `true`
@@ -1303,7 +1304,7 @@ As planned, with these specifics:
 | M4 | Responses API: native pass-through + translation over chat | Codex CLI works against a llama-swap model and an OpenAI model |
 | M5 | Anthropic adapter (chat, and Responses through it) | Claude models usable from any OpenAI client, tools included |
 | M6 | Usage pages, limits, per-key scopes, metrics port (built 2026-10-29) | a week of usage reads by day and model, a limit gives a `429` clients show, Prometheus scrapes |
-| M7 | privacybox `apps/converge-server` + docs, LiteLLM side by side (built 2026-10-29) | the owner switches clients over |
+| M7 | privacybox `apps/converge` + docs, LiteLLM side by side (built 2026-10-29) | the owner switches clients over |
 | M8 | Playground: chat columns, persona drafts, per-answer timing (built 2026-10-30) | the owner tunes and saves a persona there and compares it on two models |
 | Later | Teams, cost budgets, transcription | |
 
@@ -1315,3 +1316,11 @@ As planned, with these specifics:
   after the Responses API.
 - `/v1/responses` is wanted: milestone M4.
 - Persona prompts are readable by users by default (per-persona switch).
+- **One name, `converge`** (owner, 2026-10-30): the repo, the image
+  `ghcr.io/xblackbytesx/converge`, the program in it (`converge serve`,
+  `converge create-admin`), and the containers (`converge-app`,
+  `converge-db`: role suffixes, as everywhere in privacybox). There is no
+  Converge client, so nothing needs a `-server` to tell it apart. Only the
+  internal crates keep `converge-core` and `converge-server`. v0.1.0 had
+  already been published as `ghcr.io/xblackbytesx/converge-server`; the
+  rename ships as v0.1.1, and that old package is retired, not reused.

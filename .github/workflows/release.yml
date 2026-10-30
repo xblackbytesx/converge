@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 env:
-  IMAGE: ghcr.io/xblackbytesx/converge-server
+  IMAGE: ghcr.io/xblackbytesx/converge
 
 jobs:
   test:
@@ -164,4 +164,4 @@ jobs:
           tag="${{ github.ref_name }}"
           gh release view "$tag" > /dev/null 2>&1 \
             || gh release create "$tag" --verify-tag --title "$tag" --generate-notes \
-              --notes "Image: \`ghcr.io/xblackbytesx/converge-server:${tag#v}\`"
+              --notes "Image: \`ghcr.io/xblackbytesx/converge:${tag#v}\`"

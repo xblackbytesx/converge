@@ -1,6 +1,6 @@
 # Deploying Converge
 
-The released image `ghcr.io/xblackbytesx/converge-server` behind Traefik,
+The released image `ghcr.io/xblackbytesx/converge` behind Traefik,
 with Postgres 17. Tags: `X.Y.Z`, `X.Y`, `X`, `latest`.
 
 ## Files
@@ -8,7 +8,7 @@ with Postgres 17. Tags: `X.Y.Z`, `X.Y`, `X`, `latest`.
 Copy `docker-compose.yml` and `../.env.example` (as `.env`) into your stack.
 
 ```sh
-mkdir -p $DOCKER_ROOT/converge-server/database
+mkdir -p $DOCKER_ROOT/converge/database
 ```
 
 Everything the server keeps lives in Postgres. The app has no volume and
@@ -57,8 +57,8 @@ affected.
 
 ```sh
 docker compose up -d
-docker compose exec converge-server-app converge-server create-admin you@example.com
-docker compose exec -T converge-server-app converge-server set-password you@example.com
+docker compose exec converge-app converge create-admin you@example.com
+docker compose exec -T converge-app converge set-password you@example.com
 ```
 
 `set-password` reads one line from stdin. There is no master key and no
@@ -99,8 +99,8 @@ between chunks" (120 by default).
 docker compose ps                                     # both containers healthy
 curl -fsS https://converge.example.com/healthz        # ok
 curl -fsS https://converge.example.com/v1/models -H "Authorization: Bearer cvg_..."
-docker compose exec converge-server-app curl -fsS localhost:9090/metrics | head
-docker logs converge-server-app 2>&1 | tail -20
+docker compose exec converge-app curl -fsS localhost:9090/metrics | head
+docker logs converge-app 2>&1 | tail -20
 ```
 
 ## Upgrades

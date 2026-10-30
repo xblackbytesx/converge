@@ -2,11 +2,11 @@
 #   make dev | make test | make lint
 # Not for deployment; see deploy/docker-compose.yml for that.
 services:
-  converge-server:
+  converge:
     build:
       context: ..
       dockerfile: docker/Dockerfile.dev
-    container_name: converge-server-dev
+    container_name: converge-dev
     depends_on:
       db:
         condition: service_healthy
@@ -27,7 +27,7 @@ services:
 
   db:
     image: postgres:17
-    container_name: converge-server-dev-db
+    container_name: converge-dev-db
     environment:
       POSTGRES_USER: converge
       POSTGRES_PASSWORD: converge

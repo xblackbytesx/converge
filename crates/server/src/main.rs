@@ -8,9 +8,9 @@ use sqlx::postgres::PgPoolOptions;
 use tracing_subscriber::EnvFilter;
 
 const USAGE: &str = "usage:
-  converge-server [serve]
-  converge-server create-admin <email>   (then set its password)
-  converge-server set-password <email>   (reads the password from stdin)";
+  converge [serve]
+  converge create-admin <email>   (then set its password)
+  converge set-password <email>   (reads the password from stdin)";
 
 #[tokio::main]
 async fn main() -> Result<()> {

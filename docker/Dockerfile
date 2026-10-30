@@ -45,7 +45,7 @@ RUN set -eux; \
     triple="$(cat /target-triple)"; \
     touch crates/core/src/lib.rs crates/server/src/lib.rs crates/server/src/main.rs; \
     cargo build --release -p converge-server --target "$triple"; \
-    cp "target/$triple/release/converge-server" /converge-server
+    cp "target/$triple/release/converge" /converge
 
 FROM debian:bookworm-slim
 RUN apt-get update \
@@ -53,8 +53,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd -g 1000 converge \
     && useradd -u 1000 -g converge -M -s /usr/sbin/nologin converge
-COPY --from=builder /converge-server /usr/local/bin/converge-server
+COPY --from=builder /converge /usr/local/bin/converge
 # No volume: everything the server keeps lives in Postgres.
 USER converge
 EXPOSE 8080
-CMD ["converge-server", "serve"]
+CMD ["converge", "serve"]

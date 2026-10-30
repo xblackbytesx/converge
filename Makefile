@@ -17,7 +17,7 @@
 #   make secret        print a fresh CONVERGE_SECRET_KEY
 #
 # Local production-image smoke test (reads ./.env)
-#   make image         build converge-server:local from docker/Dockerfile
+#   make image         build converge:local from docker/Dockerfile
 #   make up / down     start / stop it with Postgres on ${PORT:-8080}
 #   make logs
 #   make admin EMAIL=you@example.com      (first account; then set its password)
@@ -25,7 +25,7 @@
 
 DEV_COMPOSE   = docker compose -f docker/docker-compose-dev.yml
 LOCAL_COMPOSE = docker compose --env-file .env -f docker/docker-compose-build.yml
-DEV_RUN       = $(DEV_COMPOSE) run --rm --build converge-server
+DEV_RUN       = $(DEV_COMPOSE) run --rm --build converge
 
 .PHONY: dev reset test lint bench fmt secret image up down logs admin password
 
@@ -63,10 +63,10 @@ down:
 	$(LOCAL_COMPOSE) down
 
 logs:
-	$(LOCAL_COMPOSE) logs -f converge-server
+	$(LOCAL_COMPOSE) logs -f converge
 
 admin:
-	$(LOCAL_COMPOSE) exec converge-server converge-server create-admin $(EMAIL)
+	$(LOCAL_COMPOSE) exec converge converge create-admin $(EMAIL)
 
 password:
-	@stty -echo; $(LOCAL_COMPOSE) exec -T converge-server converge-server set-password $(EMAIL); status=$$?; stty echo; echo; exit $$status
+	@stty -echo; $(LOCAL_COMPOSE) exec -T converge converge set-password $(EMAIL); status=$$?; stty echo; echo; exit $$status
