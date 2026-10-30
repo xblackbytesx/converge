@@ -42,7 +42,7 @@
             <button type="submit" class="small">Save</button>
           </form>
         </td>
-        <td class="actions"><a class="button small" href="/playground?pick={{ m.public_id }}">Playground</a> <form method="post" action="/models/{{ m.id }}/delete" data-confirm="Remove {{ m.public_id }}? Clients using it get model_not_found."><button type="submit" class="small danger">Remove</button></form></td>
+        <td class="actions"><a class="button small" hx-boost="false" href="/playground?pick={{ m.public_id }}">Playground</a> <form method="post" action="/models/{{ m.id }}/delete" data-confirm="Remove {{ m.public_id }}? Clients using it get model_not_found."><button type="submit" class="small danger">Remove</button></form></td>
       </tr>
       <tr class="sub{% if !m.enabled %} dim{% endif %}">
         <td colspan="4">

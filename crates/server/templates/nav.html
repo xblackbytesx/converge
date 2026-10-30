@@ -3,7 +3,7 @@
   <nav>
     <a href="/connections" class="{{ nav.on("connections") }}">{% if nav.admin %}Connections{% else %}Models{% endif %}</a>
     <a href="/personas" class="{{ nav.on("personas") }}">Personas</a>
-    <a href="/playground" class="{{ nav.on("playground") }}">Playground</a>
+    <a href="/playground" hx-boost="false" class="{{ nav.on("playground") }}">Playground</a>
     <span class="sep" aria-hidden="true"></span>
     <a href="/keys" class="{{ nav.on("keys") }}">Keys</a>
     <a href="/usage" class="{{ nav.on("usage") }}">Usage</a>

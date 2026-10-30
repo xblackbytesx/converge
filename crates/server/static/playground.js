@@ -7,6 +7,8 @@
 
   var root = document.getElementById("pg");
   if (!root) return;
+  // app.js checks this: a Playground swapped in by HTMX never gets it.
+  root.setAttribute("data-ready", "1");
   var data = JSON.parse(root.getAttribute("data-playground"));
   var STORE = "converge.playground.v1";
   var MAX = 3;

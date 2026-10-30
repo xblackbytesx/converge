@@ -1290,9 +1290,18 @@ As planned, with these specifics:
 - **Timing** is measured in the browser: first byte is when the stream
   starts (Converge sends its `converge` event once the upstream answered
   with headers), first token is the first content or reasoning delta.
-- **Not verified here**: the page in a real browser. The server side is
-  covered by `playground_pg.rs`; the JavaScript passed a syntax check
-  only.
+- **Never boosted** (fixed 2026-10-30, after the owner's first browser
+  run): the site runs `hx-boost` with `allowScriptTags` off, so a
+  Playground swapped in by HTMX had no script (empty columns, and the
+  boosted message form swapped the page away mid-answer). Every link in
+  carries `hx-boost="false"`, the page's content opts out, a history miss
+  is a real load (`refreshOnHistoryMiss`), and `app.js` reloads once if a
+  Playground ever arrives without its script (`#pg` lacks `data-ready`).
+  A test pins the links. Any future page that runs on its own script
+  follows the same rule.
+- **Not verified here**: the page in a real browser beyond the owner's
+  first run. The server side is covered by `playground_pg.rs`; the
+  JavaScript passed a syntax check only.
 
 ## Milestones
 

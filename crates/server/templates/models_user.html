@@ -10,7 +10,7 @@
 <section class="card">
   <table class="list">
     <thead><tr><th>Model id</th><th>Connection</th><th></th></tr></thead>
-    <tbody>{% for m in models %}<tr><td><code>{{ m.public_id }}</code></td><td>{{ m.connection }}</td><td class="actions"><a class="button small" href="/playground?pick={{ m.public_id }}">Playground</a></td></tr>{% endfor %}</tbody>
+    <tbody>{% for m in models %}<tr><td><code>{{ m.public_id }}</code></td><td>{{ m.connection }}</td><td class="actions"><a class="button small" hx-boost="false" href="/playground?pick={{ m.public_id }}">Playground</a></td></tr>{% endfor %}</tbody>
   </table>
 </section>
 {% endif %}

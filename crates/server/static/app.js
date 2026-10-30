@@ -25,6 +25,14 @@
     }
   });
 
+  // A page that runs on its own script (the Playground) must never arrive as
+  // an HTMX swap: HTMX does not run swapped-in scripts. Links to it opt out
+  // of boosting; if one is missed, load the page for real once.
+  document.addEventListener("htmx:afterSettle", function () {
+    var pg = document.getElementById("pg");
+    if (pg && !pg.hasAttribute("data-ready")) window.location.reload();
+  });
+
   // Clear the flash box when a new request starts, so old errors do not linger.
   document.addEventListener("htmx:beforeRequest", function () {
     var f = document.getElementById("flash");

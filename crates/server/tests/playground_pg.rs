@@ -68,7 +68,17 @@ async fn admins_stream_tune_drafts_and_save_them() {
     let Some(s) = setup().await else { return };
     let mut admin = Browser::logged_in(s.db.app(), "admin@example.com").await;
 
-    let data = page_data(&admin.get("/playground?pick=poet").await.body);
+    // HTMX never runs swapped-in scripts, so every way in loads the page
+    // for real and nothing on it is boosted.
+    let page = admin.get("/playground?pick=poet").await.body;
+    assert!(page.contains("<div hx-boost=\"false\">") && page.contains("href=\"/playground\" hx-boost=\"false\""));
+    let links = [admin.get("/connections").await.body, admin.get(&format!("/personas/{}", s.persona)).await.body];
+    for body in &links {
+        assert!(body.contains("hx-boost=\"false\" href=\"/playground?pick="), "{body}");
+        assert!(!body.contains("class=\"button small\" href=\"/playground"), "a boosted link into the Playground");
+    }
+    assert!(admin.get("/static/app.js").await.body.contains("data-ready"), "the safety net for a missed link");
+    let data = page_data(&page);
     assert_eq!(data["pick"], "poet");
     assert_eq!(data["personas"][0]["model"], "local/stream", "admins see the model behind a persona");
 
