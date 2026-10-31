@@ -9,7 +9,7 @@ named system prompts that every client can pick like a model, for example
 This file is the contract. Record decisions here when they are made, with the
 date and the reason, and keep it true to the code. Never use em dashes.
 
-**Status: contract approved 2026-10-29. M1 (skeleton, accounts, website shell), M2 (connections, models, keys, grants, `/v1` proxy, usage), M3 (personas), M4 (Responses API), M5 (Anthropic adapter), M6 (usage pages, limits, key scopes, metrics) M7 (privacybox app next to LiteLLM) built 2026-10-29, M8 (Playground) built 2026-10-30; next: the owner moves clients over.**
+**Status: contract approved 2026-10-29. M1 (skeleton, accounts, website shell), M2 (connections, models, keys, grants, `/v1` proxy, usage), M3 (personas), M4 (Responses API), M5 (Anthropic adapter), M6 (usage pages, limits, key scopes, metrics) M7 (privacybox app next to LiteLLM) built 2026-10-29, M8 (Playground) built 2026-10-30, M9 (editing keys) built 2026-10-31; next: the owner moves clients over.**
 
 ## Why it exists
 
@@ -307,6 +307,7 @@ tokens. Unsupported OpenAI parameters are dropped and named in a
 - **Keys**: `cvg_` + 32 random bytes base64url. Stored as SHA-256 plus the
   first 8 characters for display; shown once at creation. Fields: name,
   optional expiry, optional subset of the owner's grants, revoked flag.
+  Name, subset and expiry can be changed later (M9); the secret cannot.
   SHA-256 rather than Argon2 because the key itself has 256 bits of entropy
   and the hash sits on the hot path. `last_used_at` is written in batches by
   the usage writer.
@@ -1303,6 +1304,85 @@ As planned, with these specifics:
   first run. The server side is covered by `playground_pg.rs`; the
   JavaScript passed a syntax check only.
 
+## M9 plan: editing keys (approved by the owner 2026-10-31, expiry included)
+
+Goal: a key's reach can be changed after it was made, so services keep
+their key when what they may use changes. Done when the owner narrows an
+"everything" key to two models, and widens it back, without touching the
+service that uses it.
+
+### What changes
+
+- **Edit** on every live key in the Keys list (yours; admins: anyone's),
+  opening `/keys/{id}`. Revoked and expired keys have no Edit.
+- The edit page:
+  - **Name.**
+  - **Reaches**: "Everything this person can use, including what they are
+    given later" or "Only these", with the checklist of the key owner's
+    models and personas (an admin editing someone else's key sees that
+    person's grants, not their own).
+  - **Expiry** (choice 1): keep as it is, or set again from today with the
+    same choices as at creation (never, 7, 30, 90, 365 days).
+- **Saving** rewrites `api_keys.name`, `scoped`, `expires_at` and the key's
+  `key_scopes` rows in one transaction, then reloads the snapshot. The next
+  request with that key uses the new reach; requests already running
+  finish as they started. The secret itself never changes, so the service
+  notices nothing.
+- **The create form** gets the same two radio choices instead of
+  "tick nothing for everything", so creating and editing read the same.
+- Checklist entries the owner can no longer use (grant taken away) are not
+  shown and fall out of the scope on save; "Only these" with nothing ticked
+  is refused, as at creation.
+
+### Store and routes
+
+- `keys::update(pool, id, owner: Option<Uuid>, name, scope:
+  Option<&KeyScope>, expiry: Expiry)`: owner set means "only my own keys"
+  (as `revoke`); only live keys; the scope insert reuses `create`'s
+  queries (only ids that exist), factored into one helper.
+- `GET /keys/{id}` and `POST /keys/{id}`; a user asking for someone else's
+  key gets 404, like an unknown key.
+- No migration: every column already exists.
+
+### Tests
+
+- `limits_pg.rs` (where scoped keys are tested): all to some, some to
+  others, some to all, each taking effect on the very next `/v1` request
+  and `/v1/models`; the key's secret keeps working throughout.
+- `web_pg.rs`: the edit form for owner and admin (admin sees the owner's
+  grants), a user cannot open or save another person's key (404), revoked
+  keys cannot be edited, "Only these" with nothing ticked is refused,
+  expiry kept vs reset, the new create form.
+
+### One choice for the owner
+
+1. **Expiry can be changed too** (keep, or set again from today).
+   Recommended: a key that is about to expire can be extended without
+   swapping it in every service, which is the same reason for this whole
+   milestone. People already pick their own expiry at creation, so letting
+   them reset it opens nothing new. The alternative is name and reach only.
+
+### Built (2026-10-31)
+
+As planned, with these specifics:
+
+- **`keys::get` and `keys::update`** share one rule with `revoke`: the key
+  is live (not revoked, not expired) and, for a non-admin, their own.
+  Anything else is `None`/`false`, shown as 404, like an unknown key.
+  `create` and `update` write scopes through one helper (`write_scope`),
+  which replaces the rows and refuses an "only these" that names nothing.
+  A refused save rolls the whole transaction back, so nothing changes.
+- **Routes**: `GET|POST /keys/{id}`; Edit sits next to Revoke on live keys.
+- **One "Reaches" block** (`key_reach.html`) on both forms: "Everything
+  ... including what is added later" or "Only these". On the create form
+  it stays folded under "Only some models and personas"; ticks without
+  "Only these" do not narrow the key.
+- **Expiry on the edit form**: "Keep as it is" (default) or one of the
+  creation choices counted from today, never included.
+- **The checklist is the key owner's**, also when an admin edits it, so
+  an admin cannot hand a key more than its owner may use (the request path
+  intersects with the owner's grants anyway).
+
 ## Milestones
 
 | | Scope | Done when |
@@ -1315,6 +1395,7 @@ As planned, with these specifics:
 | M6 | Usage pages, limits, per-key scopes, metrics port (built 2026-10-29) | a week of usage reads by day and model, a limit gives a `429` clients show, Prometheus scrapes |
 | M7 | privacybox `apps/converge` + docs, LiteLLM side by side (built 2026-10-29) | the owner switches clients over |
 | M8 | Playground: chat columns, persona drafts, per-answer timing (built 2026-10-30) | the owner tunes and saves a persona there and compares it on two models |
+| M9 | Editing keys: name, reach, expiry (built 2026-10-31) | an "everything" key is narrowed and widened again without touching its service |
 | Later | Teams, cost budgets, transcription | |
 
 ## Settled answers (2026-10-29)

@@ -18,11 +18,8 @@
       {% if !models.is_empty() || !personas.is_empty() %}
       <details>
         <summary>Only some models and personas</summary>
-        <p class="hint">Tick nothing and the key reaches everything you can use, including what you are given later. Ticked, it reaches only these, and only while you still have them.</p>
-        <div class="picks">
-        {% for p in personas %}<label class="check"><input type="checkbox" name="persona" value="{{ p.id }}"> <code>{{ p.public_id }}</code> <span class="hint">persona</span></label>{% endfor %}
-        {% for m in models %}<label class="check"><input type="checkbox" name="model" value="{{ m.id }}"> <code>{{ m.public_id }}</code></label>{% endfor %}
-        </div>
+        <p class="hint">You can change this later with Edit, without a new key.</p>
+        {% let some = false %}{% let owner = "" %}{% include "key_reach.html" %}
       </details>
       {% endif %}
     </form>

@@ -387,7 +387,7 @@ checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
 
 [[package]]
 name = "converge-core"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -396,7 +396,7 @@ dependencies = [
 
 [[package]]
 name = "converge-server"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "arc-swap",

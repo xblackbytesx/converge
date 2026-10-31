@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ name }} · API keys · Converge{% endblock %}
+{% block nav %}{% include "nav.html" %}{% endblock %}
+{% block main_class %}narrow-wide{% endblock %}
+{% block content %}
+<h1>Edit key <code>{{ prefix }}…</code></h1>
+<p class="lead muted">{% if !owner.is_empty() %}{{ owner }}'s key. {% endif %}The key itself stays the same, so the services using it keep working; the change applies from their next request.</p>
+<form method="post" action="/keys/{{ id }}" class="card stack">
+  <label>Name <input type="text" name="name" value="{{ name }}" maxlength="60" required></label>
+  {% include "key_reach.html" %}
+  <label>Expires <span class="hint">now: {{ expires }}</span>
+    <select name="days">
+      <option value="keep" selected>Keep as it is</option>
+      {% for d in expiry %}<option value="{{ d }}">{% if *d == 0 %}Never expires{% else %}{{ d }} days from today{% endif %}</option>{% endfor %}
+    </select></label>
+  <div class="row"><button type="submit" class="primary">Save</button><a href="/keys">Cancel</a></div>
+</form>
+{% endblock %}

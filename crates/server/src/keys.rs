@@ -20,6 +20,48 @@ pub struct KeyScope {
     pub personas: Vec<Uuid>,
 }
 
+fn check_name(name: &str) -> Result<&str> {
+    let name = name.trim();
+    if name.is_empty() || name.chars().count() > 60 {
+        bail!("give the key a name of at most 60 characters");
+    }
+    Ok(name)
+}
+
+/// One of the offered expiry choices, counted from now. 0 means never.
+fn expires_in(days: i64) -> Result<Option<DateTime<Utc>>> {
+    if !EXPIRY_DAYS.contains(&days) {
+        bail!("pick one of the offered expiry choices");
+    }
+    Ok((days > 0).then(|| Utc::now() + Duration::days(days)))
+}
+
+/// Replaces a key's scope rows. Only ids that exist are kept, and a scope
+/// that keeps none is refused: "only these" must name something.
+async fn write_scope(tx: &mut sqlx::PgConnection, id: Uuid, scope: Option<&KeyScope>) -> Result<()> {
+    sqlx::query("DELETE FROM key_scopes WHERE key_id = $1").bind(id).execute(&mut *tx).await?;
+    let Some(s) = scope else { return Ok(()) };
+    let m = sqlx::query(
+        "INSERT INTO key_scopes (key_id, target_kind, target_id) SELECT $1, 'model', id FROM models WHERE id = ANY($2)",
+    )
+    .bind(id)
+    .bind(&s.models)
+    .execute(&mut *tx)
+    .await?;
+    let p = sqlx::query(
+        "INSERT INTO key_scopes (key_id, target_kind, target_id)
+         SELECT $1, 'persona', id FROM personas WHERE id = ANY($2)",
+    )
+    .bind(id)
+    .bind(&s.personas)
+    .execute(&mut *tx)
+    .await?;
+    if m.rows_affected() + p.rows_affected() == 0 {
+        bail!("pick at least one model or persona for this key, or let it reach everything");
+    }
+    Ok(())
+}
+
 /// Mints a key and returns it in plaintext (shown once) with its id.
 /// `scope` None: everything its owner may use.
 pub async fn create(
@@ -29,16 +71,10 @@ pub async fn create(
     days: i64,
     scope: Option<&KeyScope>,
 ) -> Result<(Uuid, String)> {
-    let name = name.trim();
-    if name.is_empty() || name.chars().count() > 60 {
-        bail!("give the key a name of at most 60 characters");
-    }
-    if !EXPIRY_DAYS.contains(&days) {
-        bail!("pick one of the offered expiry choices");
-    }
+    let name = check_name(name)?;
+    let expires = expires_in(days)?;
     let key = auth::new_secret(KEY_PREFIX);
     let id = Uuid::new_v4();
-    let expires = (days > 0).then(|| Utc::now() + Duration::days(days));
     let mut tx = pool.begin().await?;
     sqlx::query(
         "INSERT INTO api_keys (id, principal_id, name, key_sha256, prefix, expires_at, scoped)
@@ -53,28 +89,117 @@ pub async fn create(
     .bind(scope.is_some())
     .execute(&mut *tx)
     .await?;
-    if let Some(s) = scope {
-        let m = sqlx::query(
-            "INSERT INTO key_scopes (key_id, target_kind, target_id) SELECT $1, 'model', id FROM models WHERE id = ANY($2)",
-        )
-        .bind(id)
-        .bind(&s.models)
-        .execute(&mut *tx)
-        .await?;
-        let p = sqlx::query(
-            "INSERT INTO key_scopes (key_id, target_kind, target_id)
-             SELECT $1, 'persona', id FROM personas WHERE id = ANY($2)",
-        )
-        .bind(id)
-        .bind(&s.personas)
-        .execute(&mut *tx)
-        .await?;
-        if m.rows_affected() + p.rows_affected() == 0 {
-            bail!("pick at least one model or persona for this key, or none for everything");
-        }
-    }
+    write_scope(&mut tx, id, scope).await?;
     tx.commit().await?;
     Ok((id, key))
+}
+
+/// What the edit form changes about a key's expiry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Expiry {
+    Keep,
+    /// One of `EXPIRY_DAYS`, counted from now.
+    Days(i64),
+}
+
+/// A live key as the edit form shows it.
+#[derive(Debug)]
+pub struct KeyEdit {
+    pub id: Uuid,
+    pub principal: Uuid,
+    pub owner: String,
+    pub name: String,
+    pub prefix: String,
+    pub expires_at: Option<DateTime<Utc>>,
+    /// None: everything its owner may use.
+    pub scope: Option<KeyScope>,
+}
+
+/// The SQL for "this key, live, and the caller's to change": `owner` None
+/// is an admin (any key), Some limits it to that principal's keys.
+const LIVE: &str = "k.id = $1 AND k.revoked_at IS NULL AND (k.expires_at IS NULL OR k.expires_at > now())
+     AND ($2::uuid IS NULL OR k.principal_id = $2)";
+
+/// A live key to edit. Revoked, expired and other people's keys (for a
+/// non-admin) are None, like a key that does not exist.
+pub async fn get(pool: &PgPool, id: Uuid, owner: Option<Uuid>) -> Result<Option<KeyEdit>> {
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        principal_id: Uuid,
+        email: String,
+        name: String,
+        prefix: String,
+        expires_at: Option<DateTime<Utc>>,
+        scoped: bool,
+    }
+    let row: Option<Row> = sqlx::query_as(&format!(
+        "SELECT k.principal_id, u.email, k.name, k.prefix, k.expires_at, k.scoped
+           FROM api_keys k JOIN users u ON u.id = k.principal_id WHERE {LIVE}"
+    ))
+    .bind(id)
+    .bind(owner)
+    .fetch_optional(pool)
+    .await?;
+    let Some(row) = row else { return Ok(None) };
+    let scope = if row.scoped {
+        let rows: Vec<(String, Uuid)> =
+            sqlx::query_as("SELECT target_kind, target_id FROM key_scopes WHERE key_id = $1")
+                .bind(id)
+                .fetch_all(pool)
+                .await?;
+        let pick = |kind: &str| rows.iter().filter(|(k, _)| k == kind).map(|(_, t)| *t).collect();
+        Some(KeyScope { models: pick("model"), personas: pick("persona") })
+    } else {
+        None
+    };
+    Ok(Some(KeyEdit {
+        id,
+        principal: row.principal_id,
+        owner: row.email,
+        name: row.name,
+        prefix: row.prefix,
+        expires_at: row.expires_at,
+        scope,
+    }))
+}
+
+/// Changes a live key's name, reach and expiry in one go. The secret stays
+/// the same, so the clients using it notice nothing; the caller reloads the
+/// snapshot so the next request sees the change. False: no such live key
+/// for this caller.
+pub async fn update(
+    pool: &PgPool,
+    id: Uuid,
+    owner: Option<Uuid>,
+    name: &str,
+    scope: Option<&KeyScope>,
+    expiry: Expiry,
+) -> Result<bool> {
+    let name = check_name(name)?;
+    let expires = match expiry {
+        Expiry::Keep => None,
+        Expiry::Days(d) => Some(expires_in(d)?),
+    };
+    let mut tx = pool.begin().await?;
+    let r = sqlx::query(&format!(
+        "UPDATE api_keys k SET name = $3, scoped = $4,
+                expires_at = CASE WHEN $5 THEN $6 ELSE k.expires_at END
+          WHERE {LIVE}"
+    ))
+    .bind(id)
+    .bind(owner)
+    .bind(name)
+    .bind(scope.is_some())
+    .bind(expires.is_some())
+    .bind(expires.flatten())
+    .execute(&mut *tx)
+    .await?;
+    if r.rows_affected() != 1 {
+        return Ok(false);
+    }
+    write_scope(&mut tx, id, scope).await?;
+    tx.commit().await?;
+    Ok(true)
 }
 
 /// Revokes a key. `owner` limits it to that principal's keys (None: admin).

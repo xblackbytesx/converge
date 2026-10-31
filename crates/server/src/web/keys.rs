@@ -33,10 +33,57 @@ struct KeyView {
     scope: Option<String>,
 }
 
-/// A model or persona on the new-key form.
+/// A model or persona on the key forms.
 struct Pick {
     id: Uuid,
     public_id: String,
+    checked: bool,
+}
+
+/// What a person may use, as checklists, ticked where `scope` names it.
+fn picks(st: &AppState, principal: Uuid, scope: Option<&keys::KeyScope>) -> (Vec<Pick>, Vec<Pick>) {
+    let snap = st.gateway.load();
+    let has = |ids: Option<&Vec<Uuid>>, id: Uuid| ids.is_some_and(|v| v.contains(&id));
+    let models = snap
+        .visible(principal, None)
+        .into_iter()
+        .map(|m| Pick { id: m.id, public_id: m.public_id.clone(), checked: has(scope.map(|s| &s.models), m.id) })
+        .collect();
+    let personas = snap
+        .visible_personas(principal, None)
+        .into_iter()
+        .map(|p| Pick { id: p.id, public_id: p.public_id.clone(), checked: has(scope.map(|s| &s.personas), p.id) })
+        .collect();
+    (models, personas)
+}
+
+/// The fields both key forms share: `name`, `days` (or `keep`), `reach`
+/// (`all` or `some`) and any number of `model` and `persona` fields.
+struct KeyForm {
+    name: String,
+    days: Option<String>,
+    /// `reach=some`: only the ticked ones. Anything else: everything.
+    scope: Option<keys::KeyScope>,
+}
+
+fn key_form(body: &[u8]) -> Result<KeyForm, ApiError> {
+    let (mut name, mut days, mut some) = (String::new(), None, false);
+    let mut scope = keys::KeyScope::default();
+    for (k, v) in form_urlencoded::parse(body) {
+        match k.as_ref() {
+            "name" => name = v.into_owned(),
+            "days" => days = Some(v.into_owned()),
+            "reach" => some = v == "some",
+            "model" => scope.models.push(v.parse().map_err(|_| ApiError::bad("unknown model"))?),
+            "persona" => scope.personas.push(v.parse().map_err(|_| ApiError::bad("unknown persona"))?),
+            _ => {}
+        }
+    }
+    Ok(KeyForm { name, days, scope: some.then_some(scope) })
+}
+
+fn days(v: Option<&str>) -> Result<i64, ApiError> {
+    v.and_then(|d| d.parse().ok()).ok_or_else(|| ApiError::bad("pick one of the offered expiry choices"))
 }
 
 #[derive(Template)]
@@ -76,10 +123,7 @@ pub async fn page(State(st): State<AppState>, user: WebUser) -> Page {
     for k in all {
         if k.owner == user.email { mine.push(view(k, user.tz)) } else { others.push(view(k, user.tz)) }
     }
-    let snap = st.gateway.load();
-    let pick = |id, public_id: &str| Pick { id, public_id: public_id.to_string() };
-    let models = snap.visible(user.id, None).into_iter().map(|m| pick(m.id, &m.public_id)).collect();
-    let personas = snap.visible_personas(user.id, None).into_iter().map(|p| pick(p.id, &p.public_id)).collect();
+    let (models, personas) = picks(&st, user.id, None);
     html(KeysPage { nav: Nav::new(&user, "keys"), mine, others, expiry: keys::EXPIRY_DAYS, models, personas })
 }
 
@@ -91,27 +135,70 @@ struct KeyCreated {
     base: String,
 }
 
-/// `name`, `days`, and any number of `model` and `persona` fields: none
-/// ticked means everything the person may use.
+/// The key form (see `key_form`); "everything" unless `reach=some`.
 pub async fn create(State(st): State<AppState>, user: WebUser, headers: HeaderMap, body: Bytes) -> Page {
-    let (mut name, mut days) = (String::new(), None);
-    let mut scope = keys::KeyScope::default();
-    for (k, v) in form_urlencoded::parse(&body) {
-        match k.as_ref() {
-            "name" => name = v.into_owned(),
-            "days" => days = v.parse::<i64>().ok(),
-            "model" => scope.models.push(v.parse().map_err(|_| ApiError::bad("unknown model"))?),
-            "persona" => scope.personas.push(v.parse().map_err(|_| ApiError::bad("unknown persona"))?),
-            _ => {}
-        }
-    }
-    let days = days.ok_or_else(|| ApiError::bad("pick one of the offered expiry choices"))?;
-    let scoped = !(scope.models.is_empty() && scope.personas.is_empty());
-    let (_, key) = keys::create(&st.pool, user.id, &name, days, scoped.then_some(&scope))
+    let f = key_form(&body)?;
+    let days = days(f.days.as_deref())?;
+    let (_, key) = keys::create(&st.pool, user.id, &f.name, days, f.scope.as_ref())
         .await
         .map_err(|e| ApiError::bad(e.to_string()))?;
     st.reload().await?;
-    html(KeyCreated { name: name.trim().to_string(), key, base: format!("{}/v1", st.public_base(&headers)) })
+    html(KeyCreated { name: f.name.trim().to_string(), key, base: format!("{}/v1", st.public_base(&headers)) })
+}
+
+#[derive(Template)]
+#[template(path = "key_edit.html")]
+struct KeyEditPage {
+    nav: Nav,
+    id: Uuid,
+    name: String,
+    prefix: String,
+    /// Empty for your own key; the owner's email for an admin.
+    owner: String,
+    expires: String,
+    expiry: &'static [i64],
+    /// The key reaches only the ticked ones.
+    some: bool,
+    models: Vec<Pick>,
+    personas: Vec<Pick>,
+}
+
+/// Own live keys for everyone; any live key for admins. The checklist is
+/// the key owner's, also when an admin edits it.
+pub async fn edit_page(State(st): State<AppState>, user: WebUser, Path(id): Path<Uuid>) -> Page {
+    let owner = (!user.is_admin()).then_some(user.id);
+    let k = keys::get(&st.pool, id, owner).await.map_err(ApiError::Internal)?.ok_or(ApiError::NotFound)?;
+    let (models, personas) = picks(&st, k.principal, k.scope.as_ref());
+    html(KeyEditPage {
+        nav: Nav::new(&user, "keys"),
+        id: k.id,
+        name: k.name,
+        prefix: k.prefix,
+        owner: if k.principal == user.id { String::new() } else { k.owner },
+        expires: when(k.expires_at, user.tz, "never"),
+        expiry: keys::EXPIRY_DAYS,
+        some: k.scope.is_some(),
+        models,
+        personas,
+    })
+}
+
+/// The key form with `days` either `keep` or one of the offered choices.
+pub async fn save(State(st): State<AppState>, user: WebUser, Path(id): Path<Uuid>, body: Bytes) -> Page {
+    let owner = (!user.is_admin()).then_some(user.id);
+    let f = key_form(&body)?;
+    let expiry = match f.days.as_deref() {
+        None | Some("keep") => keys::Expiry::Keep,
+        d => keys::Expiry::Days(days(d)?),
+    };
+    let found = keys::update(&st.pool, id, owner, &f.name, f.scope.as_ref(), expiry)
+        .await
+        .map_err(|e| ApiError::bad(e.to_string()))?;
+    if !found {
+        return Err(ApiError::NotFound.into());
+    }
+    st.reload().await?;
+    Ok(Redirect::to("/keys").into_response())
 }
 
 /// Own keys for everyone; any key for admins.

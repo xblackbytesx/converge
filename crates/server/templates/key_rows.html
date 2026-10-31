@@ -10,7 +10,7 @@
       <td>{{ k.created }}</td>
       <td>{{ k.expires }}{% if k.expired %} <span class="badge warn">expired</span>{% endif %}</td>
       <td>{{ k.last_used }}</td>
-      <td class="actions">{% if k.revoked %}<span class="badge">revoked</span>{% else %}<form method="post" action="/keys/{{ k.id }}/revoke" data-confirm="Revoke {{ k.name }}? Clients using it stop working at once."><button type="submit" class="small danger">Revoke</button></form>{% endif %}</td>
+      <td class="actions">{% if k.revoked %}<span class="badge">revoked</span>{% else %}{% if !k.expired %}<a class="button small" href="/keys/{{ k.id }}">Edit</a> {% endif %}<form method="post" action="/keys/{{ k.id }}/revoke" data-confirm="Revoke {{ k.name }}? Clients using it stop working at once."><button type="submit" class="small danger">Revoke</button></form>{% endif %}</td>
     </tr>
   {% endfor %}
   </tbody>

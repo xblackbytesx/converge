@@ -355,7 +355,9 @@ async fn usage_page_limits_and_scoped_keys() {
     // A scoped key from the form.
     let keys = user.get("/keys").await.body;
     assert!(keys.contains("Only some models and personas") && keys.contains(&json.to_string()));
-    let r = user.htmx_post("/keys", &[("name", "only json"), ("days", "0"), ("model", &json.to_string())]).await;
+    let r = user
+        .htmx_post("/keys", &[("name", "only json"), ("days", "0"), ("reach", "some"), ("model", &json.to_string())])
+        .await;
     assert_eq!(r.status, StatusCode::OK, "{}", r.body);
     let key = r.body.split("cvg_").nth(1).unwrap().split(['<', '"', ' ']).next().unwrap();
     let key = format!("cvg_{key}");
@@ -399,5 +401,80 @@ async fn usage_page_limits_and_scoped_keys() {
     assert_eq!(lines.len(), 3, "{}", csv.body);
     assert!(lines[0].starts_with("time,person,key,model"));
     assert!(lines[1].contains(",kim@example.com,only json,local/json,,chat/completions,200,11,2,7,"), "{}", lines[1]);
+    db.drop().await;
+}
+
+/// M9: editing keys through the website, by their owner and by an admin.
+#[tokio::test]
+async fn keys_are_edited_through_the_website() {
+    let Some(db) = Db::new().await else { return };
+    let up = Upstream::start().await;
+    db.person("admin@example.com", Role::Admin).await;
+    let kim = db.person("kim@example.com", Role::User).await;
+    db.person("lee@example.com", Role::User).await;
+    let conn = db.connection("local", &up.base, Some(UPSTREAM_KEY)).await;
+    let json = db.model(conn, "local/json", "json").await;
+    let stream = db.model(conn, "local/stream", "stream").await;
+    db.grant(kim, false, &[json]).await;
+    let key = db.key(kim).await;
+    let id: uuid::Uuid = sqlx::query_scalar("SELECT id FROM api_keys WHERE principal_id = $1")
+        .bind(kim)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    let mut kim_b = Browser::logged_in(db.app(), "kim@example.com").await;
+    let mut admin = Browser::logged_in(db.app(), "admin@example.com").await;
+    let mut lee_b = Browser::logged_in(db.app(), "lee@example.com").await;
+    let path = format!("/keys/{id}");
+
+    let list = kim_b.get("/keys").await.body;
+    assert!(list.contains(&format!("href=\"/keys/{id}\">Edit</a>")), "{list}");
+    let form = kim_b.get(&path).await.body;
+    assert!(form.contains("value=\"all\" checked") && form.contains(&json.to_string()), "{form}");
+    assert!(!form.contains(&stream.to_string()), "only what she may use");
+    let as_admin = admin.get(&path).await.body;
+    assert!(
+        as_admin.contains("kim@example.com's key") && !as_admin.contains(&stream.to_string()),
+        "the owner's grants, not the admin's"
+    );
+    assert_eq!(lee_b.get(&path).await.status, StatusCode::NOT_FOUND, "someone else's key");
+    assert_eq!(
+        lee_b.post(&path, &[("name", "x"), ("reach", "all"), ("days", "keep")]).await.status,
+        StatusCode::NOT_FOUND
+    );
+
+    let r = kim_b.post(&path, &[("name", "x"), ("reach", "some"), ("days", "keep")]).await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST, "only these, with nothing ticked");
+    let r = kim_b
+        .post(&path, &[("name", "quantifyme"), ("reach", "some"), ("model", &json.to_string()), ("days", "30")])
+        .await;
+    assert_eq!(r.status, StatusCode::SEE_OTHER, "{}", r.body);
+    let list = kim_b.get("/keys").await.body;
+    assert!(list.contains("quantifyme") && list.contains("only</span> local/json"), "{list}");
+    let form = kim_b.get(&path).await.body;
+    assert!(form.contains("value=\"some\" checked") && form.contains(&format!("value=\"{json}\" checked")), "{form}");
+    let chat = serde_json::json!({"model": "local/json", "messages": [{"role": "user", "content": "hi"}]});
+    assert_eq!(
+        api(&db.app(), "POST", "/v1/chat/completions", Some(&key), Some(chat)).await.status,
+        StatusCode::OK,
+        "same secret"
+    );
+
+    // An admin widens it back; revoked keys have no Edit and no form.
+    let r = admin.post(&path, &[("name", "quantifyme"), ("reach", "all"), ("days", "keep")]).await;
+    assert_eq!(r.status, StatusCode::SEE_OTHER);
+    assert!(kim_b.get("/keys").await.body.contains("everything"));
+    assert_eq!(kim_b.post(&format!("{path}/revoke"), &[]).await.status, StatusCode::SEE_OTHER);
+    assert!(!kim_b.get("/keys").await.body.contains(&format!("href=\"/keys/{id}\">Edit")));
+    assert_eq!(kim_b.get(&path).await.status, StatusCode::NOT_FOUND);
+
+    // The create form uses the same choice: everything unless "some".
+    let r = kim_b
+        .htmx_post("/keys", &[("name", "all of it"), ("days", "0"), ("reach", "all"), ("model", &json.to_string())])
+        .await;
+    assert_eq!(r.status, StatusCode::OK);
+    let scoped: bool =
+        sqlx::query_scalar("SELECT scoped FROM api_keys WHERE name = 'all of it'").fetch_one(&db.pool).await.unwrap();
+    assert!(!scoped, "ticks without \"only these\" do not narrow it");
     db.drop().await;
 }

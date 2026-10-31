@@ -1,0 +1,13 @@
+<fieldset class="stack">
+  <legend>Reaches</legend>
+  <label class="check"><input type="radio" name="reach" value="all"{% if !some %} checked{% endif %}> Everything {% if owner.is_empty() %}you can{% else %}{{ owner }} can{% endif %} use, including what is added later</label>
+  <label class="check"><input type="radio" name="reach" value="some"{% if some %} checked{% endif %}> Only these, and only while {% if owner.is_empty() %}you{% else %}they{% endif %} still have them:</label>
+  {% if models.is_empty() && personas.is_empty() %}
+  <p class="muted">Nothing has been shared with {% if owner.is_empty() %}you{% else %}{{ owner }}{% endif %} yet.</p>
+  {% else %}
+  <div class="picks">
+  {% for p in personas %}<label class="check"><input type="checkbox" name="persona" value="{{ p.id }}"{% if p.checked %} checked{% endif %}> <code>{{ p.public_id }}</code> <span class="hint">persona</span></label>{% endfor %}
+  {% for m in models %}<label class="check"><input type="checkbox" name="model" value="{{ m.id }}"{% if m.checked %} checked{% endif %}> <code>{{ m.public_id }}</code></label>{% endfor %}
+  </div>
+  {% endif %}
+</fieldset>

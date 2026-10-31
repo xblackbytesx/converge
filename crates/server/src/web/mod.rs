@@ -55,6 +55,7 @@ pub fn routes() -> Router<AppState> {
         .route("/playground/persona/{id}", get(playground::persona).post(playground::save))
         .route("/static/playground.js", get(|h: HeaderMap| asset(h, &PLAYGROUND, "text/javascript")))
         .route("/keys", get(keys::page).post(keys::create))
+        .route("/keys/{id}", get(keys::edit_page).post(keys::save))
         .route("/keys/{id}/revoke", post(keys::revoke))
         .route("/usage", get(usage::page))
         .route("/usage.csv", get(usage::csv_download))

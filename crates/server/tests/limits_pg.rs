@@ -187,3 +187,74 @@ async fn scoped_keys_reach_only_their_scope() {
     assert!(e.to_string().contains("at least one"), "{e}");
     s.db.drop().await;
 }
+
+/// M9: a key's reach and expiry change in place; its secret keeps working.
+#[tokio::test]
+async fn keys_are_edited_in_place() {
+    use converge_server::keys::{Expiry, KeyScope, get, update};
+    let Some(s) = setup().await else { return };
+    let app = s.db.app();
+    let id: Uuid = sqlx::query_scalar("SELECT id FROM api_keys WHERE principal_id = $1")
+        .bind(s.kim)
+        .fetch_one(&s.db.pool)
+        .await
+        .unwrap();
+    let ids = |body: &str| -> Vec<String> {
+        let v: Value = serde_json::from_str(body).unwrap();
+        v["data"].as_array().unwrap().iter().map(|m| m["id"].as_str().unwrap().to_string()).collect()
+    };
+    let reach = |app: axum::Router, key: String| async move {
+        (
+            api(&app, "GET", "/v1/models", Some(&key), None).await.body,
+            api(&app, "POST", "/v1/chat/completions", Some(&key), Some(chat("local/json"))).await.status,
+        )
+    };
+    let (models, status) = reach(app.clone(), s.key.clone()).await;
+    assert_eq!((ids(&models), status), (vec!["local/endless".to_string(), "local/json".to_string()], StatusCode::OK));
+
+    // Everything to one model.
+    let only = |m: Uuid| KeyScope { models: vec![m], personas: vec![] };
+    assert!(update(&s.db.pool, id, Some(s.kim), "narrowed", Some(&only(s.endless)), Expiry::Keep).await.unwrap());
+    s.db.reload().await;
+    let (models, status) = reach(app.clone(), s.key.clone()).await;
+    assert_eq!(
+        (ids(&models), status),
+        (vec!["local/endless".to_string()], StatusCode::NOT_FOUND),
+        "the very next request"
+    );
+
+    // One model to another, then back to everything.
+    assert!(update(&s.db.pool, id, Some(s.kim), "swapped", Some(&only(s.json)), Expiry::Days(7)).await.unwrap());
+    s.db.reload().await;
+    let (models, status) = reach(app.clone(), s.key.clone()).await;
+    assert_eq!((ids(&models), status), (vec!["local/json".to_string()], StatusCode::OK));
+    let k = get(&s.db.pool, id, Some(s.kim)).await.unwrap().unwrap();
+    assert_eq!(k.name, "swapped");
+    let left = k.expires_at.unwrap() - chrono::Utc::now();
+    assert!(left > chrono::Duration::days(6) && left <= chrono::Duration::days(7), "set again from today");
+    assert!(update(&s.db.pool, id, Some(s.kim), "all again", None, Expiry::Keep).await.unwrap());
+    s.db.reload().await;
+    let k = get(&s.db.pool, id, None).await.unwrap().unwrap();
+    assert!(k.scope.is_none() && k.expires_at.is_some(), "kept the expiry, dropped the scope");
+    let (models, _) = reach(app.clone(), s.key.clone()).await;
+    assert_eq!(ids(&models).len(), 2);
+    let rows: i64 = sqlx::query_scalar("SELECT count(*) FROM key_scopes WHERE key_id = $1")
+        .bind(id)
+        .fetch_one(&s.db.pool)
+        .await
+        .unwrap();
+    assert_eq!(rows, 0);
+    assert!(update(&s.db.pool, id, Some(s.kim), "never", None, Expiry::Days(0)).await.unwrap());
+    assert!(get(&s.db.pool, id, None).await.unwrap().unwrap().expires_at.is_none(), "never expires");
+
+    // Refused: an empty "only these", someone else's key, a revoked key.
+    let e = update(&s.db.pool, id, Some(s.kim), "x", Some(&KeyScope::default()), Expiry::Keep).await.unwrap_err();
+    assert!(e.to_string().contains("at least one"), "{e}");
+    assert!(get(&s.db.pool, id, None).await.unwrap().unwrap().scope.is_none(), "a refused save changes nothing");
+    let other = s.db.person("other@example.com", Role::User).await;
+    assert!(!update(&s.db.pool, id, Some(other), "mine now", None, Expiry::Keep).await.unwrap());
+    assert!(get(&s.db.pool, id, Some(other)).await.unwrap().is_none());
+    converge_server::keys::revoke(&s.db.pool, id, None).await.unwrap();
+    assert!(!update(&s.db.pool, id, None, "back", None, Expiry::Keep).await.unwrap(), "revoked keys stay revoked");
+    s.db.drop().await;
+}
